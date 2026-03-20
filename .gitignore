@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# SQLite and runtime artifacts
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+logs/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/tsconfig.tsbuildinfo
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
