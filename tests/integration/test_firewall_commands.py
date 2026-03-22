@@ -65,6 +65,19 @@ class TestNetshCommandGeneration:
         calls = str(mock_run.call_args_list)
         assert "delete" in calls
 
+    def test_unblock_is_idempotent_when_rules_already_absent(self):
+        """Missing rules should be treated as already-unblocked success."""
+        from backend.os_adapters import win32_bridge
+
+        with patch.object(win32_bridge, "is_windows", return_value=True), \
+             patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=1,
+                stdout="No rules match the specified criteria.",
+                stderr="",
+            )
+            assert win32_bridge.unblock_port(port=8080) is True
+
     def test_system_pid_protection_kill(self):
         """Attempt to kill system PID 4 should raise SystemProcessProtectionError."""
         from backend.os_adapters import win32_bridge

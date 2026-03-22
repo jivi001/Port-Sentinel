@@ -1,0 +1,2 @@
+[console_scripts]
+sentinel-backend = backend.main:main

@@ -1,23 +1,12 @@
 /**
- * Sentinel — Dashboard Page
- *
- * Main dashboard extracted from the original App.tsx.
- * Stats bar, control panel, port table, and total traffic chart.
+ * Sentinel — Professional Optimized Dashboard
  */
 
 import React, { useState, useMemo } from 'react';
-import { useSocketContext } from '../SocketContext';
+import { useSocketContext } from '../hooks/SocketContext';
 import PortTable from '../components/PortTable';
 import ControlPanel from '../components/ControlPanel';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
+import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 const DashboardPage: React.FC = () => {
   const { portTable, sparklineData, connected, error } = useSocketContext();
@@ -26,12 +15,10 @@ const DashboardPage: React.FC = () => {
   const stats = useMemo(() => {
     const totalIn = portTable.reduce((s, p) => s + (p.kb_s_in ?? 0), 0);
     const totalOut = portTable.reduce((s, p) => s + (p.kb_s_out ?? 0), 0);
-    const tcpCount = portTable.filter((p) => p.protocol === 'TCP').length;
-    const udpCount = portTable.filter((p) => p.protocol === 'UDP').length;
-    return { totalIn, totalOut, tcpCount, udpCount };
+    const highRiskCount = portTable.filter(p => p.risk_score >= 7).length;
+    return { totalIn, totalOut, highRiskCount };
   }, [portTable]);
 
-  /* Aggregate sparkline data for the total traffic chart */
   const totalTrafficChart = useMemo(() => {
     const timeMap = new Map<number, { t: number; inKb: number; outKb: number }>();
     sparklineData.forEach((points) => {
@@ -52,139 +39,70 @@ const DashboardPage: React.FC = () => {
   }, [sparklineData]);
 
   return (
-    <>
-      {/* Connection + Error */}
-      <div className="page-header">
-        <h1 className="page-title">Dashboard</h1>
-        <div
-          className={`connection-badge ${
-            connected
-              ? 'connection-badge--connected'
-              : 'connection-badge--disconnected'
-          }`}
-        >
+    <div className="page-container">
+      <header className="page-header">
+        <h1 className="page-title">Operational Dashboard</h1>
+        <div className={`connection-badge ${connected ? 'connection-badge--connected' : ''}`}>
           <span className="connection-dot" />
-          {connected ? 'Live' : 'Disconnected'}
+          {connected ? 'REAL_TIME_LINK_ACTIVE' : 'OFFLINE'}
+        </div>
+      </header>
+
+      {error && <div className="error-banner">⚠ SYSTEM_FAULT: {error}</div>}
+
+      {/* Primary KPI Metrics */}
+      <div className="dashboard-summary">
+        <div className="dashboard-mini-stats">
+          <div className="kpi">
+            <span className="kpi__label">TOTAL_THROUGHPUT</span>
+            <span className="kpi__value">{formatRate(stats.totalIn + stats.totalOut)}</span>
+          </div>
+          <div className="kpi">
+            <span className="kpi__label">ACTIVE_NODES</span>
+            <span className="kpi__value">{portTable.length}</span>
+          </div>
+          <div className="kpi">
+            <span className="kpi__label">SECURITY_STATE</span>
+            <span className="kpi__value" style={{ color: stats.highRiskCount > 0 ? 'var(--accent-red)' : 'var(--accent-green)' }}>
+              {stats.highRiskCount > 0 ? 'RISK_DETECTED' : 'SECURE'}
+            </span>
+          </div>
+        </div>
+
+        {/* Real-time Integrated Chart */}
+        <div className="dashboard-compact-chart">
+          <ResponsiveContainer width="100%" height={60}>
+            <AreaChart data={totalTrafficChart}>
+              <defs>
+                <linearGradient id="miniIn" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity={0.2} />
+                  <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey="inKb" stroke="var(--accent-blue)" fill="url(#miniIn)" strokeWidth={1.5} isAnimationActive={false} />
+              <Area type="monotone" dataKey="outKb" stroke="var(--accent-orange)" fill="transparent" strokeWidth={1.5} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {error && (
-        <div className="error-banner" id="error-banner">
-          ⚠ {error}
+      {/* Main Port Table Section */}
+      <section className="sentinel-section" style={{ flex: 1, minHeight: 0 }}>
+        <div className="sentinel-section__header">
+          <h2 className="sentinel-section__title">Global Traffic Control</h2>
+          <ControlPanel filter={filter} onFilterChange={setFilter} />
         </div>
-      )}
-
-      {/* Stats Bar */}
-      <section className="stats-bar" id="stats-bar">
-        <div className="stat-card">
-          <div className="stat-card__label">Active Ports</div>
-          <div className="stat-card__value stat-card__value--blue">
-            {portTable.length}
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">Total In</div>
-          <div className="stat-card__value stat-card__value--cyan">
-            {formatRate(stats.totalIn)}
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">Total Out</div>
-          <div className="stat-card__value stat-card__value--orange">
-            {formatRate(stats.totalOut)}
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card__label">TCP / UDP</div>
-          <div className="stat-card__value stat-card__value--green">
-            {stats.tcpCount} / {stats.udpCount}
-          </div>
+        
+        <div className="port-table-container">
+          <PortTable data={portTable} sparklineData={sparklineData} filter={filter} />
         </div>
       </section>
-
-      {/* Total Traffic Chart */}
-      {totalTrafficChart.length >= 2 && (
-        <section className="traffic-chart-card" id="traffic-chart">
-          <div className="traffic-chart-card__header">
-            <span className="traffic-chart-card__title">Total Traffic (60s)</span>
-            <span className="traffic-chart-card__legend">
-              <span className="legend-dot legend-dot--blue" /> In &nbsp;
-              <span className="legend-dot legend-dot--orange" /> Out
-            </span>
-          </div>
-          <div style={{ width: '100%', height: 180 }}>
-            <ResponsiveContainer>
-              <AreaChart data={totalTrafficChart} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="gradIn" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={0.02} />
-                  </linearGradient>
-                  <linearGradient id="gradOut" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent-orange)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--accent-orange)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="t" hide />
-                <YAxis
-                  tick={{ fill: '#484f58', fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v: number) => (v >= 1024 ? `${(v / 1024).toFixed(0)}M` : `${v.toFixed(0)}`)}
-                  width={36}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: '#111620',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  labelFormatter={() => ''}
-                  formatter={(val: number, name: string) => [
-                    `${val.toFixed(1)} KB/s`,
-                    name === 'inKb' ? 'In' : 'Out',
-                  ]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="inKb"
-                  stroke="var(--accent-blue)"
-                  strokeWidth={1.5}
-                  fill="url(#gradIn)"
-                  isAnimationActive={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="outKb"
-                  stroke="var(--accent-orange)"
-                  strokeWidth={1.5}
-                  fill="url(#gradOut)"
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
-      )}
-
-      {/* Control Panel */}
-      <ControlPanel
-        filter={filter}
-        onFilterChange={setFilter}
-        portCount={portTable.length}
-      />
-
-      {/* Port Table */}
-      <PortTable data={portTable} sparklineData={sparklineData} filter={filter} />
-    </>
+    </div>
   );
 };
 
-/** Format KB/s rate with unit suffix */
 function formatRate(kbs: number): string {
-  if (kbs < 0.1) return '0 KB/s';
+  if (kbs < 0.1) return '0.0 KB/s';
   if (kbs >= 1024) return `${(kbs / 1024).toFixed(1)} MB/s`;
   return `${kbs.toFixed(1)} KB/s`;
 }

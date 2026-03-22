@@ -1,0 +1,29 @@
+# Port Sentinel Backend Dockerfile
+# NOTE: Run container with privileged/cap-add settings for packet sniffing.
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpcap-dev \
+    libpcap0.8 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY backend/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY backend /app/backend
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    HOST=0.0.0.0 \
+    PORT=8600
+
+EXPOSE 8600
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8600/api/health')" || exit 1
+
+CMD ["python", "-m", "backend.main"]

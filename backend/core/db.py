@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS traffic_history (
     kb_s_in REAL NOT NULL DEFAULT 0.0,
     kb_s_out REAL NOT NULL DEFAULT 0.0,
     protocol TEXT NOT NULL DEFAULT 'TCP',
-    direction TEXT NOT NULL DEFAULT 'both'
+    direction TEXT NOT NULL DEFAULT 'both',
+    risk_score INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_traffic_timestamp ON traffic_history(timestamp);
@@ -56,6 +57,21 @@ CREATE TABLE IF NOT EXISTS blocked_ports (
     blocked_at REAL NOT NULL,
     reason TEXT DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp REAL NOT NULL,
+    event_type TEXT NOT NULL, -- 'policy_trigger', 'manual_block', 'process_kill'
+    app_name TEXT,
+    port INTEGER,
+    pid INTEGER,
+    severity TEXT NOT NULL DEFAULT 'info', -- 'info', 'warning', 'critical'
+    message TEXT NOT NULL,
+    details TEXT -- JSON or string
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_logs(event_type);
 """
 
 
@@ -83,6 +99,17 @@ class SQLiteDB:
         self._conn.execute("PRAGMA busy_timeout=5000;")
         self._conn.executescript(SCHEMA_SQL)
         self._conn.commit()
+        
+        # --- Safe Migration ---
+        # Ensure risk_score column exists if the table was created by an older version
+        try:
+            self._conn.execute("ALTER TABLE traffic_history ADD COLUMN risk_score INTEGER DEFAULT 0;")
+            self._conn.commit()
+            logger.info("Migrated database: added risk_score column")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e).lower():
+                logger.warning(f"Migration notice: {e}")
+        
         logger.info(f"SQLite connected: {self.db_path}")
 
     def close(self) -> None:
@@ -116,14 +143,15 @@ class SQLiteDB:
                     "kb_s_out": float(record.get("kb_s_out", 0.0)),
                     "protocol": str(record.get("protocol", "TCP")),
                     "direction": str(record.get("direction", "both")),
+                    "risk_score": int(record.get("risk_score", 0)),
                 }
             )
 
         with self._write_lock:
             self.conn.executemany(
                 """INSERT INTO traffic_history
-                   (timestamp, port, pid, app_name, kb_s_in, kb_s_out, protocol, direction)
-                   VALUES (:timestamp, :port, :pid, :app_name, :kb_s_in, :kb_s_out, :protocol, :direction)""",
+                   (timestamp, port, pid, app_name, kb_s_in, kb_s_out, protocol, direction, risk_score)
+                   VALUES (:timestamp, :port, :pid, :app_name, :kb_s_in, :kb_s_out, :protocol, :direction, :risk_score)""",
                 normalized_records,
             )
             self.conn.commit()
@@ -208,6 +236,68 @@ class SQLiteDB:
         cursor = self.conn.execute("SELECT * FROM blocked_ports ORDER BY port")
         return [dict(row) for row in cursor.fetchall()]
 
+    def clear_blocked_ports(self) -> int:
+        """Remove all blocked port records."""
+        cursor = self.conn.execute("DELETE FROM blocked_ports")
+        self.conn.commit()
+        return cursor.rowcount
+
+    # --- Audit Logs ---
+
+    def insert_audit_log(self, event_type: str, message: str, app_name: Optional[str] = None, 
+                         port: Optional[int] = None, pid: Optional[int] = None, 
+                         severity: str = "info", details: Optional[str] = None) -> None:
+        """Record a system or security event."""
+        self.conn.execute(
+            """INSERT INTO audit_logs 
+               (timestamp, event_type, app_name, port, pid, severity, message, details)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (time.time(), event_type, app_name, port, pid, severity, message, details),
+        )
+        self.conn.commit()
+
+    def get_audit_logs(self, limit: int = 100) -> List[dict]:
+        """Get recent audit logs."""
+        cursor = self.conn.execute(
+            "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    # --- Analytics & Forensics ---
+
+    def get_top_talkers(self, hours: int = 24, limit: int = 10) -> List[dict]:
+        """
+        Identify applications with the highest cumulative traffic.
+        Returns total bytes transferred (KB) per application.
+        """
+        cutoff = time.time() - (hours * 3600)
+        # We sum KB/s snapshots (at ~1Hz) to estimate total KB
+        cursor = self.conn.execute(
+            """SELECT app_name, SUM(kb_s_in + kb_s_out) as total_kb, 
+                      MAX(risk_score) as max_risk
+               FROM traffic_history 
+               WHERE timestamp >= ? 
+               GROUP BY app_name 
+               ORDER BY total_kb DESC 
+               LIMIT ?""",
+            (cutoff, limit),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_global_traffic_stats(self, hours: int = 24) -> dict:
+        """Get aggregated traffic volume across the whole system."""
+        cutoff = time.time() - (hours * 3600)
+        cursor = self.conn.execute(
+            """SELECT SUM(kb_s_in) as total_in_kb, SUM(kb_s_out) as total_out_kb
+               FROM traffic_history WHERE timestamp >= ?""",
+            (cutoff,),
+        )
+        row = cursor.fetchone()
+        return {
+            "total_in_mb": round((row["total_in_kb"] or 0) / 1024, 2),
+            "total_out_mb": round((row["total_out_kb"] or 0) / 1024, 2),
+        }
+
 
 # --- InfluxDB ---
 
@@ -221,15 +311,15 @@ class InfluxDBWriter:
 
     def __init__(
         self,
-        url: str = "http://localhost:8086",
-        token: str = "",
-        org: str = "sentinel",
-        bucket: str = "traffic",
+        url: Optional[str] = None,
+        token: Optional[str] = None,
+        org: Optional[str] = None,
+        bucket: Optional[str] = None,
     ):
-        self.url = url
+        self.url = url or os.environ.get("INFLUXDB_URL", "http://localhost:8086")
         self.token = token or os.environ.get("INFLUXDB_TOKEN", "")
-        self.org = org
-        self.bucket = bucket
+        self.org = org or os.environ.get("INFLUXDB_ORG", "sentinel")
+        self.bucket = bucket or os.environ.get("INFLUXDB_BUCKET", "traffic")
         self._client = None
         self._write_api = None
 
@@ -267,6 +357,7 @@ class InfluxDBWriter:
                     .field("kb_s_in", float(r.get("kb_s_in", 0.0)))
                     .field("kb_s_out", float(r.get("kb_s_out", 0.0)))
                     .field("pid", int(r.get("pid", 0)))
+                    .field("risk_score", int(r.get("risk_score", 0)))
                     .time(int(r.get("timestamp", time.time()) * 1e9))  # nanoseconds
                 )
                 points.append(point)

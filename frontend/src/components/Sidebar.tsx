@@ -1,11 +1,8 @@
 /**
- * Sentinel — Sidebar Navigation
- *
- * Collapsible sidebar with icon + text navigation links.
- * Active route is highlighted. Collapse toggle at bottom.
+ * Sentinel — Professional Sidebar Navigation
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { NavLink } from 'react-router-dom';
 
 interface NavItem {
@@ -15,30 +12,26 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',          label: 'Dashboard',       icon: '📊' },
-  { to: '/processes', label: 'Process Control',  icon: '⚙️' },
-  { to: '/history',   label: 'Historical Logs',  icon: '📈' },
-  { to: '/network',   label: 'Network Map',      icon: '🌐' },
-  { to: '/settings',  label: 'Settings',         icon: '🔧' },
+  { to: '/',          label: 'DASHBOARD',       icon: '📊' },
+  { to: '/processes', label: 'PROCESSES',       icon: '⚙️' },
+  { to: '/history',   label: 'FORENSICS',       icon: '📈' },
+  { to: '/network',   label: 'INTELLIGENCE',    icon: '🌐' },
+  { to: '/settings',  label: 'SETTINGS',        icon: '🔧' },
 ];
 
 const Sidebar: React.FC = () => {
-  const [collapsed, setCollapsed] = useState(false);
-
   return (
-    <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`} id="sidebar">
-      {/* Brand */}
+    <aside className="sidebar">
       <div className="sidebar__brand">
-        <div className="sidebar__logo">P</div>
-        {!collapsed && (
+        <div className="sidebar__logo-container">
+          <div className="sidebar__logo">S</div>
           <div className="sidebar__brand-text">
-            <div className="sidebar__title">Sentinel</div>
-            <div className="sidebar__subtitle">Network Sentinel</div>
+            <h1 className="sidebar__title">SENTINEL</h1>
+            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>NETWORK_OPS</div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Navigation */}
       <nav className="sidebar__nav">
         {NAV_ITEMS.map((item) => (
           <NavLink
@@ -48,26 +41,17 @@ const Sidebar: React.FC = () => {
             className={({ isActive }) =>
               `sidebar__link ${isActive ? 'sidebar__link--active' : ''}`
             }
-            title={collapsed ? item.label : undefined}
           >
-            <span className="sidebar__link-icon">{item.icon}</span>
-            {!collapsed && <span className="sidebar__link-label">{item.label}</span>}
+            <span style={{ fontSize: '1.1rem', width: '24px', textAlign: 'center' }}>{item.icon}</span>
+            <span>{item.label}</span>
           </NavLink>
         ))}
       </nav>
 
-      {/* Collapse Toggle */}
-      <button
-        className="sidebar__toggle"
-        onClick={() => setCollapsed((c) => !c)}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        id="sidebar-toggle"
-      >
-        <span className="sidebar__toggle-icon">
-          {collapsed ? '▶' : '◀'}
-        </span>
-        {!collapsed && <span>Collapse</span>}
-      </button>
+      <div style={{ marginTop: 'auto', padding: '24px', borderTop: '1px solid var(--border-dim)' }}>
+        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800 }}>SYSTEM_ENCRYPTED</div>
+        <div style={{ fontSize: '0.6rem', color: 'var(--accent-blue)', fontWeight: 800, marginTop: '4px' }}>KERNEL_MODE_ACTIVE</div>
+      </div>
     </aside>
   );
 };

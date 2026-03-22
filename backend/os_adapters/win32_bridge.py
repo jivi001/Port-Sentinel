@@ -255,6 +255,10 @@ def unblock_port(port: int) -> bool:
     if not is_windows():
         return False
 
+    def _rule_missing(stdout: str, stderr: str) -> bool:
+        text = f"{stdout}\n{stderr}".lower()
+        return "no rules match" in text
+
     success = True
     for direction in ["Out", "In"]:
         rule_name = f"Sentinel_Block_{direction}_{port}"
@@ -265,8 +269,11 @@ def unblock_port(port: int) -> bool:
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, errors='replace')
             if result.returncode != 0:
-                logger.warning(f"Failed to remove rule {rule_name}: {result.stderr}")
-                success = False
+                if _rule_missing(result.stdout or "", result.stderr or ""):
+                    logger.info(f"Rule {rule_name} already absent; continuing")
+                else:
+                    logger.warning(f"Failed to remove rule {rule_name}: {result.stderr}")
+                    success = False
         except Exception as e:
             logger.warning(f"Error removing rule {rule_name}: {e}")
             success = False

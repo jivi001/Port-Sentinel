@@ -247,13 +247,25 @@ def block_port(port: int, protocol: str = "tcp", interface: str = "en0") -> bool
 
 def unblock_port(port: int) -> bool:
     """Remove the pf rule for a specific port and reload."""
+    if port not in _active_rules and os.path.exists(PF_RULES_FILE):
+        try:
+            with open(PF_RULES_FILE, "r", encoding="utf-8") as f:
+                for line in f:
+                    match = re.search(r"port\s+(\d+)\s*$", line.strip())
+                    if match:
+                        parsed_port = int(match.group(1))
+                        _active_rules[parsed_port] = line.strip()
+        except Exception as e:
+            logger.debug(f"Could not load PF rules from file: {e}")
+
     if port in _active_rules:
         del _active_rules[port]
         _write_pf_rules()
         _reload_pf()
         logger.info(f"Unblocked port {port} (macOS)")
         return True
-    return False
+    logger.info(f"Port {port} already unblocked (macOS)")
+    return True
 
 
 def _write_pf_rules() -> None:

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "port-sentinel"
+version = "1.2.0"
+description = "High-performance network monitoring and administrative control system"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Sentinel Team", email = "jiviteshgd28@gmail.com"}
+]
+keywords = ["network", "monitoring", "security", "port-scanner", "firewall"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking :: Monitoring",
+    "Topic :: Security",
+]
+
+dependencies = [
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "python-socketio==5.12.1",
+    "python-engineio==4.11.2",
+    "scapy==2.6.1",
+    "psutil==6.1.1",
+    "msgpack==1.1.0",
+    "aiosqlite==0.20.0",
+    "influxdb-client==1.48.0",
+    "supabase==2.11.0",
+    "requests==2.32.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "httpx==0.28.1",
+]
+
+[project.scripts]
+sentinel-backend = "backend.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
+[tool.setuptools.package-data]
+backend = ["py.typed"]

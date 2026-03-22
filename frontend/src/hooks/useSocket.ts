@@ -8,9 +8,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { decode } from '@msgpack/msgpack';
-import type { PortTable, SparklinePoint } from './types';
+import type { PortTable, SparklinePoint } from '../types';
 
-const SOCKET_URL = '/';
+const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:8600' : '/';
 const SPARKLINE_WINDOW = 60; // 60 seconds of history
 
 interface UseSocketReturn {

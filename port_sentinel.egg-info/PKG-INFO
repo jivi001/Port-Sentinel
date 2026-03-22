@@ -1,0 +1,101 @@
+Metadata-Version: 2.4
+Name: port-sentinel
+Version: 1.2.0
+Summary: High-performance network monitoring and administrative control system
+Author-email: Sentinel Team <jiviteshgd28@gmail.com>
+License: MIT
+Keywords: network,monitoring,security,port-scanner,firewall
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: System Administrators
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: System :: Networking :: Monitoring
+Classifier: Topic :: Security
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi==0.115.6
+Requires-Dist: uvicorn[standard]==0.34.0
+Requires-Dist: python-socketio==5.12.1
+Requires-Dist: python-engineio==4.11.2
+Requires-Dist: scapy==2.6.1
+Requires-Dist: psutil==6.1.1
+Requires-Dist: msgpack==1.1.0
+Requires-Dist: aiosqlite==0.20.0
+Requires-Dist: influxdb-client==1.48.0
+Requires-Dist: supabase==2.11.0
+Requires-Dist: requests==2.32.3
+Provides-Extra: dev
+Requires-Dist: pytest==8.3.4; extra == "dev"
+Requires-Dist: pytest-asyncio==0.24.0; extra == "dev"
+Requires-Dist: httpx==0.28.1; extra == "dev"
+
+# Sentinel — Unified Network Intelligence & Security Console
+
+**Sentinel** is a high-performance, real-time network monitoring and automated administrative control system. Designed for "Elite Cyber Midnight" professional operations, it provides deep visibility into system-wide port traffic, process-level network consumption, and global endpoint intelligence.
+
+---
+
+## 🚀 Optimized Professional Features
+
+### 1. **Network Intelligence & Topology**
+*   **Logical Mapping**: Real-time visualization of your system's connection hub.
+*   **Bidirectional Flow**: High-contrast animated rails showing Inbound (Blue) and Outbound (Orange) data flow.
+*   **Endpoint Enrichment**: Integrated with `ipinfo.io` to provide real-time Organization (ASN) and Country-level intelligence for every connection.
+
+### 2. **Automated Policy Engine**
+*   **Machine-Speed Response**: Automated "If-This-Then-That" logic for incident response.
+*   **Security Guard**: Pre-configurable rules to automatically kill processes or block ports based on traffic spikes or risk scores.
+*   **Audit Trail**: Every automated action is permanently logged in the local Forensic database.
+
+### 3. **Deep Forensic Analysis**
+*   **Historical Timeline**: 24-hour sliding window of detailed traffic metrics per port and process.
+*   **Security Events Audit**: Dedicated forensic log for tracking all system blocks, process terminations, and policy triggers.
+*   **Persistence**: Powered by a robust SQLite backend with automatic schema migrations.
+
+### 4. **Elite Design System**
+*   **Cyber Midnight Theme**: A high-contrast, professional monitoring aesthetic designed for long-duration visibility.
+*   **Pixel-Perfect Alignment**: A unified content grid ensuring perfect data synchronization across all views.
+*   **Glassmorphism UI**: Multi-layered depth effects using hardware-accelerated CSS.
+
+---
+
+## 🛠️ Security & Stability
+
+*   **Sentinel Watchdog**: A dedicated sidecar process that monitors the Sentinel kernel and automatically restarts it if tampered with or terminated.
+*   **Environment Isolation**: Full `.env` support for managing sensitive API tokens and system configurations.
+*   **Protected Service Behavior**: Designed to survive in user-space while providing near-kernel-level visibility.
+
+---
+
+## 📦 Installation & Setup
+
+### **Prerequisites**
+*   **Python 3.10+** (Backend)
+*   **Node.js 18+** (Frontend)
+*   **Windows**: [Npcap](https://npcap.com/) installed in "WinPcap API-compatible mode."
+
+### **Fast Start (Windows)**
+1.  Copy `.env.example` to `.env`.
+2.  Add your `IPINFO_TOKEN` to the `.env` file.
+3.  Right-click your terminal and select **Run as Administrator**.
+4.  Run the startup script:
+    ```batch
+    run.bat
+    ```
+
+### **Manual Configuration**
+The system uses `8600` for the API/Socket.io backend and `5173` for the professional dashboard. These can be adjusted in your `.env` file.
+
+---
+
+## 📝 Forensic Database
+The system maintains a local database at `backend/data/sentinel.db`. This file contains your historical traffic patterns and security event logs. To start with a clean slate, simply delete this file while the backend is stopped.
+
+---
+
+**© 2026 Sentinel Network Operations**  
+*Secure. Aligned. Unified.*

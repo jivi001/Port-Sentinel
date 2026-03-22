@@ -19,6 +19,7 @@ logger = logging.getLogger("sentinel.metrics")
 # 24h at 1Hz = 86,400 entries max per port
 MAX_WINDOW_ENTRIES = 86_400
 OVERFLOW_THRESHOLD = sys.maxsize  # 2^63 - 1 on 64-bit Python
+ACTIVE_PORT_TTL_SECONDS = 5.0
 
 
 @dataclass
@@ -32,6 +33,10 @@ class PortSnapshot:
     kb_s_out: float
     protocol: str  # "TCP" or "UDP"
     direction: str  # "both"
+    risk_score: int = 0
+    remote_ip: str = "0.0.0.0"
+    org: str = "Unknown"
+    country: str = "??"
 
 
 @dataclass
@@ -228,20 +233,11 @@ class TrafficAccumulator:
         pid: int,
         protocol: int,
         timestamp: Optional[float] = None,
+        risk_score: int = 0,
+        remote_ip: str = "0.0.0.0",
     ) -> PortSnapshot:
         """
-        Process raw port data into a PortSnapshot with KB/s rates.
-
-        Args:
-            port: Port number
-            bytes_in: Cumulative bytes received
-            bytes_out: Cumulative bytes sent
-            pid: Process ID owning this port
-            protocol: 0=TCP, 1=UDP
-            timestamp: Override timestamp (for testing)
-
-        Returns:
-            PortSnapshot with calculated rates.
+        Process raw port data into a PortSnapshot with KB/s rates and IP metadata.
         """
         if timestamp is None:
             timestamp = time.time()
@@ -253,6 +249,10 @@ class TrafficAccumulator:
         app_name = self._resolve_app_name(pid)
         proto_str = "TCP" if protocol == 0 else "UDP"
 
+        # Enrichment: IP Metadata (Geo/ASN)
+        from backend.core.threat_intel import threat_manager
+        meta = threat_manager.get_ip_metadata(remote_ip)
+
         snapshot = PortSnapshot(
             timestamp=timestamp,
             port=port,
@@ -262,6 +262,10 @@ class TrafficAccumulator:
             kb_s_out=kb_s_out,
             protocol=proto_str,
             direction="both",
+            risk_score=max(risk_score, meta.get("risk", 0)),
+            remote_ip=remote_ip,
+            org=meta.get("org", "Unknown"),
+            country=meta.get("country", "??"),
         )
 
         self.cache.add(snapshot)
@@ -288,12 +292,15 @@ class TrafficAccumulator:
         self._app_name_cache[pid] = name
         return name
 
-    def get_port_table(self) -> List[dict]:
+    def get_port_table(self, current_time: Optional[float] = None) -> List[dict]:
         """
         Get the current full port table as a list of dicts.
 
         This is what gets serialized to MsgPack and sent to the frontend.
         """
+        if current_time is None:
+            current_time = time.time()
+
         # Get latest snapshot per port from cache
         latest: Dict[int, PortSnapshot] = {}
         for port, dq in self.cache._cache.items():
@@ -310,9 +317,14 @@ class TrafficAccumulator:
                 "kb_s": round(s.kb_s_in + s.kb_s_out, 2),
                 "protocol": s.protocol,
                 "direction": s.direction,
+                "risk_score": s.risk_score,
+                "remote_ip": s.remote_ip,
+                "org": s.org,
+                "country": s.country,
                 "timestamp": s.timestamp,
             }
             for s in sorted(latest.values(), key=lambda x: x.port)
+            if (current_time - s.timestamp) <= ACTIVE_PORT_TTL_SECONDS
         ]
 
     def cleanup(self) -> None:

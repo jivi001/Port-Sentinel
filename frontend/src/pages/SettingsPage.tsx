@@ -1,240 +1,137 @@
 /**
- * Sentinel — Settings Page
- *
- * Blocked ports management, health status, and configuration.
+ * Sentinel — Professional Settings Page
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiService } from '../services/apiService';
 import ConfirmModal from '../components/ConfirmModal';
-import type { BlockedPort, HealthResponse } from '../types';
 
 const SettingsPage: React.FC = () => {
-  const [blockedPorts, setBlockedPorts] = useState<BlockedPort[]>([]);
-  const [health, setHealth] = useState<HealthResponse | null>(null);
-  const [newPort, setNewPort] = useState('');
-  const [newReason, setNewReason] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [blockedPorts, setBlockedPorts] = useState<any[]>([]);
+  const [health, setHealth] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastColor, setToastColor] = useState<string>('var(--accent-green)');
   const [unblockPort, setUnblockPort] = useState<number | null>(null);
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, color: string = 'var(--accent-green)') => {
+    setToastColor(color);
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   };
 
-  /* Fetch blocked ports */
   const fetchBlocked = useCallback(async () => {
     try {
-      const resp = await fetch('/api/blocked');
-      if (resp.ok) {
-        const data = await resp.json();
-        setBlockedPorts(Array.isArray(data) ? data : []);
-      }
+      const data = await apiService.getBlockedPorts();
+      setBlockedPorts(data);
     } catch (e) {
-      console.error('Failed to fetch blocked ports', e);
+      console.error(e);
     }
   }, []);
 
-  /* Fetch health */
   const fetchHealth = useCallback(async () => {
     try {
-      const resp = await fetch('/api/health');
-      if (resp.ok) {
-        setHealth(await resp.json());
-      }
+      const data = await apiService.getHealth();
+      setHealth(data);
     } catch (e) {
-      console.error('Failed to fetch health', e);
+      console.error(e);
     }
   }, []);
 
   useEffect(() => {
     fetchBlocked();
     fetchHealth();
-    const interval = setInterval(fetchHealth, 10000);
-    return () => clearInterval(interval);
+    const inv = setInterval(fetchHealth, 5000);
+    return () => clearInterval(inv);
   }, [fetchBlocked, fetchHealth]);
 
-  /* Block a port */
-  const handleBlock = async () => {
-    const portNum = parseInt(newPort, 10);
-    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      setError('Enter a valid port (1–65535)');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const resp = await fetch(`/api/control/block/${portNum}`, {
-        method: 'POST',
-      });
-      if (resp.ok) {
-        showToast(`✓ Port ${portNum} blocked`);
-        setNewPort('');
-        setNewReason('');
-        fetchBlocked();
-      } else {
-        setError('Failed to block port');
-      }
-    } catch (e) {
-      setError(`Network error: ${String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* Unblock a port */
   const handleUnblock = async () => {
     if (unblockPort == null) return;
+    const targetPort = unblockPort;
     try {
-      const resp = await fetch(`/api/control/unblock/${unblockPort}`, {
-        method: 'POST',
-      });
-      if (resp.ok) {
-        showToast(`✓ Port ${unblockPort} unblocked`);
+      const success = await apiService.unblockPort(targetPort);
+      if (success) {
+        showToast(`✓ PORT ${targetPort} UNBLOCKED`);
         fetchBlocked();
+      } else {
+        showToast(`RESTORE FAILED FOR PORT ${targetPort}`, 'var(--accent-red)');
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Restore request failed';
+      showToast(message.toUpperCase(), 'var(--accent-red)');
     }
     setUnblockPort(null);
   };
 
   return (
-    <>
-      <div className="page-header">
-        <h1 className="page-title">Settings</h1>
+    <div className="page-container">
+      <header className="page-header">
+        <h1 className="page-title">Console Configuration</h1>
+        {toast && <div className="connection-badge" style={{ color: toastColor }}>{toast}</div>}
+      </header>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* System Health */}
+        <section className="sentinel-section">
+          <div className="sentinel-section__header">
+            <h2 className="sentinel-section__title">Operational Health</h2>
+          </div>
+          <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="kpi">
+              <span className="kpi__label">System Kernel</span>
+              <span className="kpi__value" style={{ color: 'var(--accent-green)' }}>{health?.platform?.toUpperCase() || 'SEARCHING...'}</span>
+            </div>
+            <div className="kpi">
+              <span className="kpi__label">Sniffer Status</span>
+              <span className="kpi__value" style={{ color: health?.sniffer_alive ? 'var(--accent-blue)' : 'var(--accent-red)' }}>
+                {health?.sniffer_alive ? 'ACTIVE_SCANNING' : 'OFFLINE'}
+              </span>
+            </div>
+            <div className="kpi">
+              <span className="kpi__label">System Uptime</span>
+              <span className="kpi__value">{health ? `${Math.floor(health.uptime_seconds / 60)}M` : '0M'}</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Firewall Rules */}
+        <section className="sentinel-section">
+          <div className="sentinel-section__header">
+            <h2 className="sentinel-section__title">Firewall Policy (Hard Blocks)</h2>
+          </div>
+          <div className="data-table-container">
+            <div className="data-table-header">
+              <div className="col-sm">PORT</div>
+              <div className="col-flex">REASON</div>
+              <div className="col-md col-right">ACTION</div>
+            </div>
+            <div className="data-table-body" style={{ maxHeight: '300px' }}>
+              {blockedPorts.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem' }}>NO ACTIVE BLOCKS</div>
+              ) : (
+                blockedPorts.map(p => (
+                  <div key={p.port} className="data-row">
+                    <div className="col-sm mono text-red">{p.port}</div>
+                    <div className="col-flex text-muted" style={{ fontSize: '0.7rem' }}>{p.reason || 'MANUAL_BLOCK'}</div>
+                    <div className="col-md col-right">
+                      <button className="btn" style={{ color: 'var(--accent-blue)' }} onClick={() => setUnblockPort(p.port)}>RESTORE</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
       </div>
 
-      {toast && <div className="toast toast--success">{toast}</div>}
-
-      {/* Health Status Section */}
-      <section className="settings-section">
-        <h2 className="settings-section__title">System Status</h2>
-        {health ? (
-          <div className="stats-bar" style={{ marginBottom: 0 }}>
-            <div className="stat-card">
-              <div className="stat-card__label">Platform</div>
-              <div className="stat-card__value stat-card__value--blue">
-                {health.platform}
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card__label">Sniffer</div>
-              <div
-                className={`stat-card__value ${
-                  health.sniffer_alive
-                    ? 'stat-card__value--green'
-                    : 'stat-card__value--orange'
-                }`}
-              >
-                {health.sniffer_alive ? 'Active' : 'Down'}
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card__label">Ports Tracked</div>
-              <div className="stat-card__value stat-card__value--cyan">
-                {health.ports_tracked}
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-card__label">Uptime</div>
-              <div className="stat-card__value stat-card__value--green">
-                {formatUptime(health.uptime_seconds)}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="empty-state" style={{ padding: '24px 0' }}>
-            <div className="empty-state__text">Loading health data…</div>
-          </div>
-        )}
-      </section>
-
-      {/* Blocked Ports Section */}
-      <section className="settings-section">
-        <h2 className="settings-section__title">Blocked Ports</h2>
-
-        {/* Add Port Form */}
-        <div className="settings-form">
-          <input
-            className="control-panel__search"
-            type="number"
-            placeholder="Port number"
-            value={newPort}
-            onChange={(e) => setNewPort(e.target.value)}
-            min={1}
-            max={65535}
-            style={{ width: 140 }}
-            id="block-port-input"
-          />
-          <input
-            className="control-panel__search"
-            type="text"
-            placeholder="Reason (optional)"
-            value={newReason}
-            onChange={(e) => setNewReason(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <button
-            className="btn btn--sm btn--danger"
-            onClick={handleBlock}
-            disabled={loading || !newPort}
-          >
-            {loading ? 'Blocking…' : 'Block Port'}
-          </button>
-        </div>
-
-        {error && <div className="error-banner" style={{ marginTop: 8 }}>{error}</div>}
-
-        {/* Blocked Ports List */}
-        {blockedPorts.length === 0 ? (
-          <div className="empty-state" style={{ padding: '32px 0' }}>
-            <div className="empty-state__icon">🛡️</div>
-            <div className="empty-state__text">No ports are currently blocked</div>
-          </div>
-        ) : (
-          <div className="blocked-list">
-            {blockedPorts.map((bp) => (
-              <div key={bp.port} className="blocked-item">
-                <div className="blocked-item__port">{bp.port}</div>
-                <div className="blocked-item__info">
-                  <span className="blocked-item__type">{bp.block_type}</span>
-                  {bp.reason && (
-                    <span className="blocked-item__reason">{bp.reason}</span>
-                  )}
-                </div>
-                <button
-                  className="btn btn--sm btn--ghost"
-                  onClick={() => setUnblockPort(bp.port)}
-                  title="Unblock this port"
-                >
-                  ✕ Unblock
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <ConfirmModal
-        open={unblockPort != null}
-        title="Unblock Port"
-        message={`Remove port ${unblockPort} from the blocked list?`}
-        confirmLabel="Unblock"
-        variant="warning"
+      <ConfirmModal 
+        open={!!unblockPort} 
+        title="Remove Firewall Rule?"
+        message={`Restore connectivity to Port ${unblockPort}? This will remove the Sentinel_ firewall entry.`}
         onConfirm={handleUnblock}
         onCancel={() => setUnblockPort(null)}
       />
-    </>
+    </div>
   );
 };
-
-function formatUptime(secs: number): string {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
 
 export default SettingsPage;

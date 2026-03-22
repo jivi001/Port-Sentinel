@@ -24,9 +24,14 @@ import asyncio
 import logging
 import platform
 import threading
-from multiprocessing import shared_memory, Event as MPEvent
+from multiprocessing import shared_memory, Event as MPEvent, Lock as MPLock
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Any
+
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 import uvicorn
 import msgpack
@@ -45,6 +50,8 @@ from backend.core.sniffer import (
 )
 from backend.core.metrics import TrafficAccumulator, PortSnapshot
 from backend.core.db import SQLiteDB, InfluxDBWriter
+from backend.core.policies import PolicyEngine
+from backend.core.watchdog import spawn_watchdog
 from backend.core.exceptions import SystemProcessProtectionError, FirewallRuleError
 
 # --- Logging ---
@@ -56,8 +63,8 @@ logging.basicConfig(
 logger = logging.getLogger("sentinel.main")
 
 # --- Configuration ---
-HOST = "0.0.0.0"
-PORT = 8600
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", "8600"))
 EMIT_INTERVAL = 1.0  # 1Hz Socket.io push
 DB_FLUSH_INTERVAL = 60.0  # Flush traffic history to SQLite every 60s
 EVICT_INTERVAL = 3600.0  # Evict stale cache every 1h
@@ -82,6 +89,40 @@ sniffer_stop_event: Optional[MPEvent] = None
 traffic_accumulator = TrafficAccumulator()
 db = SQLiteDB()
 influx = InfluxDBWriter()
+shm_lock = MPLock()
+
+def _policy_action_handler(action: str, target: any, app_name: Optional[str] = None):
+    """Callback for PolicyEngine to execute OS-level actions and log them."""
+    if not os_bridge:
+        return
+    try:
+        msg = f"Automated {action} triggered on "
+        severity = "warning"
+        
+        if action == "kill":
+            os_bridge.kill_process(target)
+            msg += f"PID {target}"
+            severity = "critical"
+        elif action == "block":
+            os_bridge.block_port(target)
+            db.add_blocked_port(target, block_type="hard", reason="Policy Engine Auto-Block")
+            msg += f"Port {target}"
+            severity = "critical"
+        elif action == "suspend":
+            os_bridge.suspend_process(target)
+            msg += f"PID {target}"
+            
+        db.insert_audit_log(
+            event_type="policy_trigger",
+            message=msg,
+            app_name=app_name,
+            severity=severity,
+            details=f"Action: {action}, Target: {target}"
+        )
+    except Exception as e:
+        logger.error(f"Policy action {action} failed: {e}")
+
+policy_engine = PolicyEngine(action_handler=_policy_action_handler)
 dispatcher_running = False
 shm: Optional[shared_memory.SharedMemory] = None
 
@@ -115,12 +156,7 @@ def _psutil_fallback_entries() -> list:
     """
     Build port entries from psutil when the Scapy sniffer is unavailable.
 
-    Returns a list of (port, bytes_in, bytes_out, pid, protocol, active) tuples
-    using the same format that read_all_active_ports() returns from shared memory.
-
-    NOTE: psutil cannot provide per-port byte counters (only system-wide via
-    net_io_counters). So bytes_in/bytes_out are set to 0 and will produce 0 KB/s
-    rates, but ports, PIDs, protocols, and app names are all accurate.
+    Returns a list of (port, bytes_in, bytes_out, pid, protocol, active, risk_score, remote_ip) tuples.
     """
     seen: dict[int, tuple] = {}
     try:
@@ -132,9 +168,12 @@ def _psutil_fallback_entries() -> list:
             port = conn.laddr.port
             pid = conn.pid or 0
             proto = 0 if conn.type == 1 else 1  # SOCK_STREAM=1=TCP, SOCK_DGRAM=2=UDP
-            # Keep the first entry per port (usually the LISTEN or ESTABLISHED)
+            remote_ip = conn.raddr.ip if conn.raddr else "0.0.0.0"
+            
+            # Keep the first entry per port
             if port not in seen:
-                seen[port] = (port, 0, 0, pid, proto, 1)
+                # (port, bytes_in, bytes_out, pid, protocol, active, risk_score, remote_ip)
+                seen[port] = (port, 0, 0, pid, proto, 1, 0, remote_ip)
     except (psutil.AccessDenied, PermissionError):
         logger.debug("Access denied reading net_connections for fallback")
     except Exception as e:
@@ -178,25 +217,42 @@ async def dispatcher_loop_async():
         try:
             now = time.time()
 
-            # Read active ports from shared memory or psutil fallback
-            if use_fallback:
-                active_ports = _psutil_fallback_entries()
-            else:
+            # 1. Get port list from system (psutil) - ensures we see ALL open ports
+            system_ports = _psutil_fallback_entries()
+            
+            # 2. Get traffic data from sniffer (shared memory) - has real counters
+            sniffer_ports = []
+            if not use_fallback:
                 try:
-                    active_ports = read_all_active_ports(shm)
+                    sniffer_ports = read_all_active_ports(shm, lock=shm_lock)
                 except Exception as e:
                     logger.debug(f"SHM read error: {e}")
-                    active_ports = []
 
-                # If sniffer died and SHM is empty, switch to fallback
-                if not active_ports:
-                    fallback_entries = _psutil_fallback_entries()
-                    if fallback_entries:
-                        active_ports = fallback_entries
+            # 3. Merge: Prioritize sniffer data for counters, use system data for occupancy
+            # Key: port
+            merged_map = {entry[0]: list(entry) for entry in system_ports}
+            
+            for s_entry in sniffer_ports:
+                port = s_entry[0]
+                # If sniffer has data, overwrite counters and remote_ip
+                if port in merged_map:
+                    # Keep system's PID/Proto but use sniffer's bytes and risk
+                    # s_entry = (port, bytes_in, bytes_out, pid, protocol, active, risk, remote_ip)
+                    merged_map[port][1] = s_entry[1] # bytes_in
+                    merged_map[port][2] = s_entry[2] # bytes_out
+                    merged_map[port][6] = s_entry[6] # risk_score
+                    if s_entry[7] != "0.0.0.0":
+                        merged_map[port][7] = s_entry[7] # remote_ip
+                else:
+                    # New port only seen by sniffer
+                    merged_map[port] = list(s_entry)
+
+            active_ports = list(merged_map.values())
 
             # Process each port through the TrafficAccumulator
             for entry in active_ports:
-                port, bytes_in, bytes_out, pid, protocol, active = entry
+                port, bytes_in, bytes_out, pid, protocol, active, risk_score, remote_ip = entry
+
                 snapshot = traffic_accumulator.process_port_data(
                     port=port,
                     bytes_in=bytes_in,
@@ -204,7 +260,12 @@ async def dispatcher_loop_async():
                     pid=pid,
                     protocol=protocol,
                     timestamp=now,
+                    risk_score=risk_score,
+                    remote_ip=remote_ip,
                 )
+
+                # Automated Policy Enforcement
+                policy_engine.evaluate(snapshot)
 
                 # Queue for database flush
                 pending_db_records.append({
@@ -216,6 +277,7 @@ async def dispatcher_loop_async():
                     "kb_s_out": snapshot.kb_s_out,
                     "protocol": snapshot.protocol,
                     "direction": snapshot.direction,
+                    "risk_score": snapshot.risk_score,
                 })
 
             # Get the full port table for emission
@@ -281,6 +343,8 @@ def cleanup():
         try:
             removed = os_bridge.cleanup_all_rules()
             logger.info(f"Cleaned up {removed} firewall rules")
+            cleared = db.clear_blocked_ports()
+            logger.info(f"Cleared {cleared} blocked port records")
         except Exception as e:
             logger.error(f"Firewall cleanup error: {e}")
 
@@ -320,7 +384,7 @@ async def lifespan(app: FastAPI):
     # Start sniffer process (non-fatal if it fails — psutil fallback will be used)
     try:
         sniffer_stop_event = MPEvent()
-        sniffer_process = SnifferProcess(stop_event=sniffer_stop_event)
+        sniffer_process = SnifferProcess(stop_event=sniffer_stop_event, lock=shm_lock)
         sniffer_process.start()
         logger.info(f"Sniffer process launched (PID={sniffer_process.pid})")
     except Exception as e:
@@ -330,6 +394,9 @@ async def lifespan(app: FastAPI):
     # Start dispatcher task
     dispatcher_running = True
     asyncio.create_task(dispatcher_loop_async())
+
+    # Start watchdog for persistence
+    watchdog = spawn_watchdog()
 
     yield
 
@@ -352,11 +419,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount Socket.io
-socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
-
 
 # --- REST Endpoints ---
+
+@app.get("/")
+async def root():
+    """Professional system information dashboard (JSON)."""
+    p = psutil.Process(os.getpid())
+    return {
+        "system": {
+            "name": "Sentinel Unified Network Sentinel",
+            "version": "1.2.0",
+            "status": "Operational",
+            "platform": PLATFORM,
+            "uptime_seconds": round(time.time() - start_time, 2),
+        },
+        "resources": {
+            "cpu_usage_percent": psutil.cpu_percent(),
+            "memory_usage_mb": round(p.memory_info().rss / (1024 * 1024), 2),
+            "threads_active": threading.active_count()
+        },
+        "sentinel_engine": {
+            "sniffer_active": sniffer_process.is_alive() if sniffer_process else False,
+            "ports_monitored": traffic_accumulator.cache.port_count(),
+            "policies_loaded": len(policy_engine.policies)
+        },
+        "endpoints": {
+            "api_health": "/api/health",
+            "api_ports": "/api/ports",
+            "api_blocked": "/api/blocked",
+            "interactive_docs": "/docs"
+        }
+    }
 
 @app.get("/api/health")
 async def health():
@@ -442,6 +536,9 @@ async def kill_process_endpoint(pid: int):
 @app.post("/api/control/block/{port}")
 async def block_port_endpoint(port: int, protocol: str = "TCP"):
     """Hard Block: Add firewall rules to block a port."""
+    if protocol.upper() not in ["TCP", "UDP"]:
+        raise HTTPException(status_code=400, detail="Invalid protocol. Must be TCP or UDP.")
+    
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
     try:
@@ -469,10 +566,24 @@ async def get_blocked_ports():
     """Get list of currently blocked ports."""
     return db.get_blocked_ports()
 
+@app.get("/api/analytics/top-talkers")
+async def get_top_talkers(hours: int = 24, limit: int = 10):
+    """Analytics: Identify applications with highest traffic."""
+    return db.get_top_talkers(hours=hours, limit=limit)
+
+@app.get("/api/audit/logs")
+async def get_audit_logs(limit: int = 100):
+    """Forensics: Get recent system and security events."""
+    return db.get_audit_logs(limit=limit)
+
 
 # --- Entry Point ---
 
-if __name__ == "__main__":
+def main() -> None:
+    """Run the backend ASGI server."""
+    # Wrap FastAPI with Socket.io ASGI app at runtime
+    socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
+    
     logger.info(f"Starting Sentinel on {HOST}:{PORT}")
     uvicorn.run(
         socket_app,
@@ -481,3 +592,7 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False,
     )
+
+
+if __name__ == "__main__":
+    main()

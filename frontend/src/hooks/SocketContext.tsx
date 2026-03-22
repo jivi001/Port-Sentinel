@@ -8,7 +8,8 @@
 
 import React, { createContext, useContext } from 'react';
 import { useSocket } from './useSocket';
-import type { PortTable, SparklinePoint } from './types';
+
+import type { PortTable, SparklinePoint } from '../types';
 
 interface SocketContextValue {
   portTable: PortTable;

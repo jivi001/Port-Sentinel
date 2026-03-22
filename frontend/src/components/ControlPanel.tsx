@@ -1,7 +1,5 @@
 /**
- * Sentinel — ControlPanel Component
- *
- * Search/filter bar sitting above the port table.
+ * Sentinel — Professional Search Control
  */
 
 import React from 'react';
@@ -9,25 +7,31 @@ import React from 'react';
 interface ControlPanelProps {
   filter: string;
   onFilterChange: (value: string) => void;
-  portCount: number;
 }
 
-const ControlPanel: React.FC<ControlPanelProps> = ({ filter, onFilterChange, portCount }) => {
+const ControlPanel: React.FC<ControlPanelProps> = ({ filter, onFilterChange }) => {
   return (
-    <div className="control-panel" id="control-panel">
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, maxWidth: '400px' }}>
       <input
-        id="port-filter"
-        className="control-panel__search"
         type="text"
-        placeholder="Filter by port, app name, PID, or protocol…"
+        placeholder="SEARCH ACTIVE NODES..."
         value={filter}
         onChange={(e) => onFilterChange(e.target.value)}
         autoComplete="off"
         spellCheck={false}
+        style={{
+          width: '100%',
+          background: 'var(--bg-glass)',
+          border: '1px solid var(--border-default)',
+          borderRadius: '6px',
+          padding: '8px 16px',
+          color: 'white',
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          letterSpacing: '0.05em',
+          outline: 'none',
+        }}
       />
-      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-        {portCount} port{portCount !== 1 ? 's' : ''}
-      </span>
     </div>
   );
 };

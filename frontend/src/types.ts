@@ -12,6 +12,10 @@ export interface PortEntry {
   kb_s_out: number;   // KB/s outbound
   direction: string;  // "IN" | "OUT" | "BOTH"
   status: string;     // "LISTEN" | "ESTABLISHED" | etc.
+  risk_score: number; // Threat score 0-10
+  remote_ip: string;
+  org: string;
+  country: string;
   timestamp: number;  // epoch
 }
 

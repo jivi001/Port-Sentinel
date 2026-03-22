@@ -7,14 +7,13 @@
 
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { SocketProvider } from './SocketContext';
+import { SocketProvider } from './hooks/SocketContext';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import ProcessControlPage from './pages/ProcessControlPage';
 import HistoricalLogsPage from './pages/HistoricalLogsPage';
 import NetworkMapPage from './pages/NetworkMapPage';
 import SettingsPage from './pages/SettingsPage';
-
 const App: React.FC = () => {
   return (
     <SocketProvider>
@@ -33,5 +32,6 @@ const App: React.FC = () => {
     </SocketProvider>
   );
 };
+
 
 export default App;

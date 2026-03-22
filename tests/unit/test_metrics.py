@@ -192,7 +192,7 @@ class TestTrafficAccumulator:
         """process_port_data should produce a retrievable port table entry."""
         accumulator.process_port_data(80, 0, 0, pid=1234, protocol=0, timestamp=100.0)
         accumulator.process_port_data(80, 10240, 5120, pid=1234, protocol=0, timestamp=101.0)
-        table = accumulator.get_port_table()
+        table = accumulator.get_port_table(current_time=101.0)
         assert len(table) == 1
         assert table[0]["port"] == 80
         assert table[0]["kb_s_in"] == 10.0
@@ -203,7 +203,7 @@ class TestTrafficAccumulator:
         for port in [443, 80, 8080]:
             accumulator.process_port_data(port, 0, 0, pid=100, protocol=0, timestamp=100.0)
             accumulator.process_port_data(port, 1024, 512, pid=100, protocol=0, timestamp=101.0)
-        table = accumulator.get_port_table()
+        table = accumulator.get_port_table(current_time=101.0)
         assert len(table) == 3
         assert [r["port"] for r in table] == [80, 443, 8080]
 
@@ -211,16 +211,25 @@ class TestTrafficAccumulator:
         """Protocol 1 should map to 'UDP'."""
         accumulator.process_port_data(53, 0, 0, pid=999, protocol=1, timestamp=100.0)
         accumulator.process_port_data(53, 2048, 1024, pid=999, protocol=1, timestamp=101.0)
-        table = accumulator.get_port_table()
+        table = accumulator.get_port_table(current_time=101.0)
         assert table[0]["protocol"] == "UDP"
 
     def test_system_pid_app_names(self, accumulator):
         """PID 0, 1, 4 should all resolve to 'System'."""
         for pid in [0, 1, 4]:
             accumulator.process_port_data(80 + pid, 0, 0, pid=pid, protocol=0, timestamp=100.0)
-        table = accumulator.get_port_table()
+        table = accumulator.get_port_table(current_time=100.0)
         for row in table:
             assert row["app_name"] == "System"
+
+    def test_get_port_table_filters_stale_ports(self, accumulator):
+        """Only recently active ports should appear in the live table."""
+        accumulator.process_port_data(80, 0, 0, pid=1234, protocol=0, timestamp=100.0)
+        accumulator.process_port_data(443, 0, 0, pid=1234, protocol=0, timestamp=100.0)
+        accumulator.process_port_data(443, 1024, 0, pid=1234, protocol=0, timestamp=109.0)
+
+        table = accumulator.get_port_table(current_time=110.0)
+        assert [r["port"] for r in table] == [443]
 
     def test_cleanup_evicts_stale(self, accumulator):
         """cleanup() should evict old entries without crashing."""
