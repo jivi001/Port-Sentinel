@@ -36,9 +36,11 @@ load_dotenv()
 import uvicorn
 import msgpack
 import psutil
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import socketio
 
 # --- Project imports ---
@@ -422,7 +424,7 @@ app.add_middleware(
 
 # --- REST Endpoints ---
 
-@app.get("/")
+@app.get("/api/info")
 async def root():
     """Professional system information dashboard (JSON)."""
     p = psutil.Process(os.getpid())
@@ -575,6 +577,48 @@ async def get_top_talkers(hours: int = 24, limit: int = 10):
 async def get_audit_logs(limit: int = 100):
     """Forensics: Get recent system and security events."""
     return db.get_audit_logs(limit=limit)
+
+
+# --- Static Frontend Serving ---
+
+def _find_frontend_dist() -> Optional[str]:
+    """Locate the built React frontend dist folder."""
+    # 1. PyInstaller frozen bundle (_MEIPASS)
+    if getattr(sys, 'frozen', False):
+        bundled = Path(sys._MEIPASS) / 'frontend_dist'
+        if bundled.is_dir():
+            return str(bundled)
+    # 2. Development: relative to project root
+    project_root = Path(__file__).resolve().parent.parent
+    dev_dist = project_root / 'frontend' / 'dist'
+    if dev_dist.is_dir():
+        return str(dev_dist)
+    return None
+
+
+_frontend_path = _find_frontend_dist()
+if _frontend_path:
+    # Serve index.html for any non-API, non-file route (SPA fallback)
+    @app.get("/")
+    async def serve_spa_root():
+        return FileResponse(os.path.join(_frontend_path, "index.html"))
+
+    # Mount static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_path, "assets")), name="static-assets")
+
+    # SPA catch-all: any path not matched by API returns index.html
+    @app.get("/{full_path:path}")
+    async def serve_spa_fallback(full_path: str):
+        # Try to serve the exact file first (e.g. favicon.ico, robots.txt)
+        file_path = os.path.join(_frontend_path, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        # Otherwise return index.html for client-side routing
+        return FileResponse(os.path.join(_frontend_path, "index.html"))
+
+    logger.info(f"Frontend static files mounted from: {_frontend_path}")
+else:
+    logger.warning("Frontend dist not found — API-only mode (no UI served)")
 
 
 # --- Entry Point ---

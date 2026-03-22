@@ -69,6 +69,9 @@ const HistoricalLogsPage: React.FC = () => {
             <option value="">SELECT PORT...</option>
             {[...new Set(portTable.map(p => p.port))].sort((a,b) => a-b).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
+          {loading && (
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em' }}>LOADING_HISTORY</span>
+          )}
         </div>
       </header>
 
