@@ -136,7 +136,7 @@ class TestTrafficAccumulatorPortTable:
         try:
             acc.process_port_data(80, 0, 0, 1234, 0, timestamp=100.0)
             acc.process_port_data(80, 1024, 512, 1234, 0, timestamp=101.0)
-            table = acc.get_port_table()
+            table = acc.get_port_table(current_time=101.0)
         finally:
             patcher.stop()
 
@@ -151,7 +151,7 @@ class TestTrafficAccumulatorPortTable:
         try:
             for port in [8080, 443, 80, 3306]:
                 acc.process_port_data(port, 0, 0, 100, 0, timestamp=100.0)
-            table = acc.get_port_table()
+            table = acc.get_port_table(current_time=100.0)
         finally:
             patcher.stop()
 
@@ -164,7 +164,7 @@ class TestTrafficAccumulatorPortTable:
         try:
             acc.process_port_data(80, 0, 0, 1234, 0, timestamp=100.0)
             acc.process_port_data(80, 10240, 5120, 1234, 0, timestamp=101.0)
-            table = acc.get_port_table()
+            table = acc.get_port_table(current_time=101.0)
         finally:
             patcher.stop()
 

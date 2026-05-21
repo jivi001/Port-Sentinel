@@ -51,10 +51,16 @@ def fake_shm():
 # ---------------------------------------------------------------------------
 
 def write_port_entry(shm, port: int, bytes_in: int, bytes_out: int,
-                     pid: int, protocol: int = 0, active: int = 1):
+                     pid: int, protocol: int = 0, active: int = 1,
+                     risk_score: int = 0, remote_ip: str = "0.0.0.0"):
     """Write a single port entry to the given shared-memory buffer."""
+    import socket
+    try:
+        ip_bytes = socket.inet_aton(remote_ip)
+    except:
+        ip_bytes = b'\x00\x00\x00\x00'
     offset = port * ENTRY_SIZE
-    data = PORT_ENTRY_STRUCT.pack(port, bytes_in, bytes_out, pid, protocol, active)
+    data = PORT_ENTRY_STRUCT.pack(port, bytes_in, bytes_out, pid, protocol, active, risk_score, ip_bytes)
     shm.buf[offset:offset + ENTRY_SIZE] = data
 
 
@@ -121,6 +127,8 @@ class MockPacket:
         self._layers = {"IP": True}
         self.sport = sport
         self.dport = dport
+        self.src = "192.168.1.100"
+        self.dst = "8.8.8.8"
         self._payload_len = payload_len
         self._proto = proto
         if proto == "TCP":

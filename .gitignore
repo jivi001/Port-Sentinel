@@ -8,6 +8,14 @@ backend/__pycache__/
 backend/core/__pycache__/
 backend/os_adapters/__pycache__/
 
+# --- Python Packaging & Testing ---
+build/
+dist/
+*.egg-info/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 # --- Node / Frontend ---
 frontend/node_modules/
 frontend/dist/

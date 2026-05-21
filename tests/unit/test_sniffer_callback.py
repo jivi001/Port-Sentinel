@@ -146,7 +146,7 @@ class TestSharedMemoryIO:
         """Active port entry should be read correctly."""
         entry = read_port_entry(populated_shm, 80)
         assert entry is not None
-        port, bytes_in, bytes_out, pid, proto, active = entry
+        port, bytes_in, bytes_out, pid, proto, active, risk, ip = entry
         assert port == 80
         assert bytes_in == 102400
         assert pid == 1234

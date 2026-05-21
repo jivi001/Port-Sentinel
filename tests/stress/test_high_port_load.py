@@ -69,7 +69,7 @@ class TestHighPortLoad:
                     )
 
                 # Get the full port table (simulates dispatch)
-                table = acc.get_port_table()
+                table = acc.get_port_table(current_time=t_now)
 
                 elapsed_ms = (time.perf_counter() - start) * 1000
                 latencies_ms.append(elapsed_ms)
@@ -101,7 +101,7 @@ class TestHighPortLoad:
                 acc.process_port_data(port, 0, 0, pid=1000 + port, protocol=0, timestamp=100.0)
                 acc.process_port_data(port, 10240, 5120, pid=1000 + port, protocol=0, timestamp=101.0)
 
-            table = acc.get_port_table()
+            table = acc.get_port_table(current_time=101.0)
             assert len(table) >= PORT_COUNT, \
                 f"Expected {PORT_COUNT} ports, got {len(table)}"
         finally:
@@ -114,7 +114,7 @@ class TestHighPortLoad:
             for i in range(1000):
                 acc.process_port_data(80, i * 100, i * 50, pid=1234, protocol=0, timestamp=100.0 + i * 0.001)
 
-            table = acc.get_port_table()
+            table = acc.get_port_table(current_time=101.0)
             ports = [r["port"] for r in table]
             assert 80 in ports
         finally:
