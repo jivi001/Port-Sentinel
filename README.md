@@ -300,12 +300,23 @@ pytest -v
 
 ## 14. Screenshots
 
-*(Placeholders for application interfaces)*
+- **Live Traffic Dashboard**
+  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175203" src="https://github.com/user-attachments/assets/0e6645be-d7f5-4e28-b1f4-bd602f50342c" />
 
-- ![Live Traffic Dashboard](https://via.placeholder.com/1000x500.png?text=Live+Traffic+Dashboard)
-- ![Process Control Modal](https://via.placeholder.com/1000x500.png?text=Process+Kill/Suspend+Interface)
+- **Process Analytics & Drilldown**
+  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175214" src="https://github.com/user-attachments/assets/630cedf4-34c3-4a9d-81df-ea11639b3cc1" />
 
-*(Refer to the original images linked in the repository documentation)*
+- **Interactive Settings**
+  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175222" src="https://github.com/user-attachments/assets/c954f35d-38a1-4488-b53d-16895230a5f6" />
+
+- **Policy Manager**
+  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175230" src="https://github.com/user-attachments/assets/3d68a96f-c663-4b1a-81f4-230c9c5ebb95" />
+
+- **Blocked Connections Overview**
+  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175240" src="https://github.com/user-attachments/assets/170ed3ac-84ef-474f-9447-1019fcc34141" />
+
+- **Detailed Telemetry Streams**
+  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175250" src="https://github.com/user-attachments/assets/9437fee4-1d9c-4455-8cdc-39eaff17f104" />
 
 ---
 
