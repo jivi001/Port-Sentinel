@@ -111,7 +111,7 @@ class SnifferProcess(multiprocessing.Process):
         import socket
         try:
             ip_bytes = socket.inet_aton(remote_ip)
-        except:
+        except (OSError, ValueError):
             ip_bytes = b'\x00\x00\x00\x00'
 
         # Guard against overflow
@@ -156,36 +156,49 @@ class SnifferProcess(multiprocessing.Process):
                 remote_ip = ip_layer.dst
                 risk = threat_manager.get_risk_score(remote_ip)
                 if sport not in self._accum:
-                    self._accum[sport] = [0, 0, 0, protocol, 0, "0.0.0.0"] # in, out, pid, proto, risk, remote_ip
+                    self._accum[sport] = [0, 0, 0, protocol, 0, "0.0.0.0", 0.0] # in, out, pid, proto, risk, remote_ip, last_seen
                 self._accum[sport][1] += payload_len
                 self._accum[sport][4] = max(self._accum[sport][4], risk)
                 self._accum[sport][5] = remote_ip
+                self._accum[sport][6] = time.time()
 
             # Accumulate for destination port (inbound)
             if dport > 0 and dport < MAX_PORTS:
                 remote_ip = ip_layer.src
                 risk = threat_manager.get_risk_score(remote_ip)
                 if dport not in self._accum:
-                    self._accum[dport] = [0, 0, 0, protocol, 0, "0.0.0.0"]
+                    self._accum[dport] = [0, 0, 0, protocol, 0, "0.0.0.0", 0.0]
                 self._accum[dport][0] += payload_len
                 self._accum[dport][4] = max(self._accum[dport][4], risk)
                 self._accum[dport][5] = remote_ip
+                self._accum[dport][6] = time.time()
 
         except Exception as e:
             logger.debug(f"Packet callback error: {e}")
 
     def _flush_to_shm(self) -> None:
-        """Write accumulated byte counts to shared memory."""
+        """Write accumulated byte counts to shared memory and manage stale entries."""
         if self._shm is None:
             return
 
         pid_map = self._build_pid_map()
+        now = time.time()
 
         with self.lock:
-            for port, (bytes_in, bytes_out, old_pid, proto, risk, remote_ip) in self._accum.items():
-                pid = pid_map.get(port, old_pid)
-                self._write_port_entry(port, bytes_in, bytes_out, pid, proto, 1, risk, remote_ip)
-                self._accum[port][2] = pid 
+            for port, data in self._accum.items():
+                bytes_in, bytes_out, old_pid, proto, risk, remote_ip, last_seen = data
+                # Mark inactive if no packets received for 30 seconds
+                active = 1 if (now - last_seen) <= 30 else 0
+                pid = pid_map.get(port, old_pid) if active else old_pid
+                self._write_port_entry(port, bytes_in, bytes_out, pid, proto, active, risk, remote_ip)
+                if active:
+                    data[2] = pid
+
+        # Prevent unbounded dict growth from ephemeral ports
+        if len(self._accum) > 5000:
+            stale = [p for p, d in self._accum.items() if now - d[6] > 300]
+            for port in stale:
+                del self._accum[port]
 
     def _build_pid_map(self) -> Dict[int, int]:
         """Build port → PID map using psutil."""
@@ -278,7 +291,7 @@ def read_port_entry(shm: shared_memory.SharedMemory,
     import socket
     try:
         remote_ip = socket.inet_ntoa(entry[7])
-    except:
+    except (OSError, ValueError):
         remote_ip = "0.0.0.0"
         
     return (*entry[:7], remote_ip)
@@ -288,23 +301,28 @@ def read_all_active_ports(shm: shared_memory.SharedMemory, lock: Optional[multip
     """
     Read all active port entries from shared memory.
 
-    Returns list of (port, bytes_in, bytes_out, pid, protocol, active, risk_score) tuples.
+    Returns list of (port, bytes_in, bytes_out, pid, protocol, active, risk_score, remote_ip) tuples.
+
+    Optimized: checks the active-flag byte (offset 23 in each 32-byte entry)
+    before doing a full struct.unpack, skipping ~99.9% of inactive ports.
     """
     active = []
-    
-    # Define the range to scan (can be optimized if we track active ports elsewhere)
-    ports_to_check = range(MAX_PORTS)
 
-    if lock:
-        with lock:
-            for port in ports_to_check:
-                entry = read_port_entry(shm, port)
-                if entry is not None:
-                    active.append(entry)
-    else:
-        for port in ports_to_check:
+    def _scan():
+        buf = shm.buf
+        for port in range(MAX_PORTS):
+            # Fast path: active flag is byte 23 within each 32-byte entry
+            if buf[port * ENTRY_SIZE + 23] == 0:
+                continue
+            # Only unpack entries that are actually active
             entry = read_port_entry(shm, port)
             if entry is not None:
                 active.append(entry)
-                
+
+    if lock:
+        with lock:
+            _scan()
+    else:
+        _scan()
+
     return active

@@ -168,24 +168,26 @@ class SQLiteDB:
     def prune_old_traffic(self, max_age_hours: int = 24) -> int:
         """Delete traffic records older than max_age_hours."""
         cutoff = time.time() - (max_age_hours * 3600)
-        cursor = self.conn.execute(
-            "DELETE FROM traffic_history WHERE timestamp < ?", (cutoff,)
-        )
-        self.conn.commit()
-        return cursor.rowcount
+        with self._write_lock:
+            cursor = self.conn.execute(
+                "DELETE FROM traffic_history WHERE timestamp < ?", (cutoff,)
+            )
+            self.conn.commit()
+            return cursor.rowcount
 
     # --- Process Map ---
 
     def upsert_process(self, pid: int, app_name: str) -> None:
         """Insert or update process map entry."""
         now = time.time()
-        self.conn.execute(
-            """INSERT INTO process_map (pid, app_name, first_seen, last_seen)
-               VALUES (?, ?, ?, ?)
-               ON CONFLICT(pid) DO UPDATE SET app_name=?, last_seen=?""",
-            (pid, app_name, now, now, app_name, now),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            self.conn.execute(
+                """INSERT INTO process_map (pid, app_name, first_seen, last_seen)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(pid) DO UPDATE SET app_name=?, last_seen=?""",
+                (pid, app_name, now, now, app_name, now),
+            )
+            self.conn.commit()
 
     def get_process_name(self, pid: int) -> Optional[str]:
         """Look up app name by PID."""
@@ -199,13 +201,14 @@ class SQLiteDB:
 
     def set_config(self, key: str, value: str) -> None:
         """Set a config value."""
-        self.conn.execute(
-            """INSERT INTO config_cache (key, value, updated_at)
-               VALUES (?, ?, ?)
-               ON CONFLICT(key) DO UPDATE SET value=?, updated_at=?""",
-            (key, value, time.time(), value, time.time()),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            self.conn.execute(
+                """INSERT INTO config_cache (key, value, updated_at)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(key) DO UPDATE SET value=?, updated_at=?""",
+                (key, value, time.time(), value, time.time()),
+            )
+            self.conn.commit()
 
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get a config value."""
@@ -219,17 +222,19 @@ class SQLiteDB:
 
     def add_blocked_port(self, port: int, block_type: str = "hard", reason: str = "") -> None:
         """Record a blocked port."""
-        self.conn.execute(
-            """INSERT OR REPLACE INTO blocked_ports (port, block_type, blocked_at, reason)
-               VALUES (?, ?, ?, ?)""",
-            (port, block_type, time.time(), reason),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            self.conn.execute(
+                """INSERT OR REPLACE INTO blocked_ports (port, block_type, blocked_at, reason)
+                   VALUES (?, ?, ?, ?)""",
+                (port, block_type, time.time(), reason),
+            )
+            self.conn.commit()
 
     def remove_blocked_port(self, port: int) -> None:
         """Remove a blocked port record."""
-        self.conn.execute("DELETE FROM blocked_ports WHERE port = ?", (port,))
-        self.conn.commit()
+        with self._write_lock:
+            self.conn.execute("DELETE FROM blocked_ports WHERE port = ?", (port,))
+            self.conn.commit()
 
     def get_blocked_ports(self) -> List[dict]:
         """Get all currently blocked ports."""
@@ -238,9 +243,10 @@ class SQLiteDB:
 
     def clear_blocked_ports(self) -> int:
         """Remove all blocked port records."""
-        cursor = self.conn.execute("DELETE FROM blocked_ports")
-        self.conn.commit()
-        return cursor.rowcount
+        with self._write_lock:
+            cursor = self.conn.execute("DELETE FROM blocked_ports")
+            self.conn.commit()
+            return cursor.rowcount
 
     # --- Audit Logs ---
 
@@ -248,13 +254,14 @@ class SQLiteDB:
                          port: Optional[int] = None, pid: Optional[int] = None, 
                          severity: str = "info", details: Optional[str] = None) -> None:
         """Record a system or security event."""
-        self.conn.execute(
-            """INSERT INTO audit_logs 
-               (timestamp, event_type, app_name, port, pid, severity, message, details)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (time.time(), event_type, app_name, port, pid, severity, message, details),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            self.conn.execute(
+                """INSERT INTO audit_logs 
+                   (timestamp, event_type, app_name, port, pid, severity, message, details)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (time.time(), event_type, app_name, port, pid, severity, message, details),
+            )
+            self.conn.commit()
 
     def get_audit_logs(self, limit: int = 100) -> List[dict]:
         """Get recent audit logs."""

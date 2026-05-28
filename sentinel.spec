@@ -101,9 +101,8 @@ if os.path.isdir('frontend/dist'):
 if os.path.isdir('backend/data'):
     datas.append(('backend/data', 'backend/data'))
 
-# .env file
-if os.path.isfile('.env'):
-    datas.append(('.env', '.'))
+# NOTE: .env is NOT bundled intentionally — it may contain secrets
+# (API keys, DB tokens). Users should place .env next to the .exe at runtime.
 
 a = Analysis(
     ['launcher.py'],

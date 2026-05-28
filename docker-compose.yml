@@ -8,6 +8,12 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8600
+      # REQUIRED when exposing on 0.0.0.0 — set a strong random key:
+      # SENTINEL_API_KEY: <generate with: python -c "import secrets; print(secrets.token_urlsafe(32))">
+      #
+      # Allow the nginx frontend origin for CORS:
+      SENTINEL_CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8600,http://127.0.0.1:8600"
+      #
       # Optional cloud integrations:
       # INFLUXDB_TOKEN: your_token_here
       # SUPABASE_URL: your_supabase_url

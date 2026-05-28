@@ -20,6 +20,35 @@ echo   Port Sentinel — EXE Builder
 echo ========================================
 echo.
 
+REM --- Determine Python command ---
+where py >nul 2>&1
+if !errorlevel! equ 0 (
+    set "PYTHON_CMD=py"
+) else (
+    where python >nul 2>&1
+    if !errorlevel! equ 0 (
+        set "PYTHON_CMD=python"
+    ) else (
+        echo ERROR: Python is not installed or not in PATH.
+        exit /b 1
+    )
+)
+echo      Using Python: !PYTHON_CMD!
+
+REM --- Ensure virtual environment exists ---
+if not exist ".venv" (
+    echo      Creating virtual environment...
+    !PYTHON_CMD! -m venv .venv
+    if !errorlevel! neq 0 (
+        echo ERROR: Failed to create virtual environment!
+        exit /b 1
+    )
+)
+
+REM --- Use venv Python/pip for all operations ---
+set "VENV_PYTHON=.venv\Scripts\python.exe"
+set "VENV_PIP=.venv\Scripts\pip.exe"
+
 REM --- Step 1: Build the Frontend ---
 echo [1/3] Building React frontend...
 cd frontend
@@ -27,7 +56,7 @@ cd frontend
 REM Check if node_modules exists
 if not exist "node_modules" (
     echo      Installing npm dependencies...
-    call npm install
+    call npm ci
     if !errorlevel! neq 0 (
         echo ERROR: npm install failed!
         cd ..
@@ -52,25 +81,26 @@ if not exist "frontend\dist\index.html" (
 echo      Frontend built successfully.
 echo.
 
-REM --- Step 2: Ensure PyInstaller is installed ---
-echo [2/3] Checking PyInstaller...
-pip show pyinstaller >nul 2>&1
+REM --- Step 2: Ensure build dependencies are installed in venv ---
+echo [2/3] Checking build dependencies...
+%VENV_PIP% install --quiet -e ".[dev]"
+%VENV_PIP% show pyinstaller >nul 2>&1
 if !errorlevel! neq 0 (
     echo      Installing PyInstaller...
-    pip install pyinstaller
+    %VENV_PIP% install pyinstaller
     if !errorlevel! neq 0 (
         echo ERROR: Failed to install PyInstaller!
         exit /b 1
     )
 )
-echo      PyInstaller is ready.
+echo      Build dependencies ready.
 echo.
 
 REM Also ensure python-dotenv is available (used by launcher)
-pip show python-dotenv >nul 2>&1
+%VENV_PIP% show python-dotenv >nul 2>&1
 if !errorlevel! neq 0 (
     echo      Installing python-dotenv...
-    pip install python-dotenv
+    %VENV_PIP% install python-dotenv
 )
 
 REM --- Step 3: Build the .exe ---
@@ -83,7 +113,7 @@ if not errorlevel 1 (
     echo      for PyInstaller ^(see script header^).
     echo.
 )
-pyinstaller sentinel.spec --noconfirm --clean
+%VENV_PYTHON% -m PyInstaller sentinel.spec --noconfirm --clean
 if !errorlevel! neq 0 (
     echo.
     echo ERROR: PyInstaller build failed!

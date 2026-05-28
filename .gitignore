@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 .venv/
 .pytest_cache/
-backend/__pycache__/
-backend/core/__pycache__/
-backend/os_adapters/__pycache__/
 
 # --- Python Packaging & Testing ---
 build/
@@ -16,6 +13,7 @@ dist/
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+
 # --- Node / Frontend ---
 frontend/node_modules/
 frontend/dist/
@@ -35,9 +33,15 @@ logs/
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env
 
 # --- OS / IDE ---
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+.gemini/
+
+# --- PyInstaller ---
+*.spec.bak
+sentinel_pf_rules.conf

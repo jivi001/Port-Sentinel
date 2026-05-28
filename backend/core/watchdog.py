@@ -12,6 +12,7 @@ import subprocess
 import sys
 import logging
 import threading
+from typing import Optional
 import psutil
 
 logger = logging.getLogger("sentinel.watchdog")

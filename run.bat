@@ -78,7 +78,7 @@ start "Sentinel_Backend" cmd /k ".venv\Scripts\python.exe -m backend.main"
 
 REM Start frontend in this terminal
 pushd frontend
-call npm run dev -- --host 0.0.0.0
+call npm run dev
 popd
 
 echo.

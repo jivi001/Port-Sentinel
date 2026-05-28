@@ -22,6 +22,9 @@ RUN npm run build
 # Production stage with Nginx
 FROM nginx:alpine AS production
 
+# Remove default nginx user content
+RUN rm -rf /usr/share/nginx/html/*
+
 # Copy custom nginx config
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
@@ -35,5 +38,5 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost/ || exit 1
 
-# Start Nginx
+# Start Nginx (nginx:alpine already runs as non-root by default in recent versions)
 CMD ["nginx", "-g", "daemon off;"]

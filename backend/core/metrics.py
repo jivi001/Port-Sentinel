@@ -223,7 +223,7 @@ class TrafficAccumulator:
     def __init__(self):
         self.metrics = PortMetrics()
         self.cache = SlidingWindowCache()
-        self._app_name_cache: Dict[int, str] = {}  # pid -> app_name
+        self._app_name_cache: Dict[int, tuple] = {}  # pid -> (app_name, resolved_at)
 
     def process_port_data(
         self,
@@ -271,17 +271,20 @@ class TrafficAccumulator:
         self.cache.add(snapshot)
         return snapshot
 
-    def _resolve_app_name(self, pid: int) -> str:
-        """Resolve PID to application name with caching."""
-        if pid in self._app_name_cache:
-            return self._app_name_cache[pid]
+    _PID_CACHE_TTL = 60.0  # Re-resolve process names every 60 seconds
+    _PID_CACHE_MAX = 500   # Max entries before forced eviction
 
-        if pid == 0:
+    def _resolve_app_name(self, pid: int) -> str:
+        """Resolve PID to application name with TTL-based caching."""
+        now = time.time()
+
+        if pid in self._app_name_cache:
+            name, resolved_at = self._app_name_cache[pid]
+            if now - resolved_at < self._PID_CACHE_TTL:
+                return name
+
+        if pid in (0, 1, 4):
             name = "System"
-        elif pid == 4:
-            name = "System"  # Windows System process
-        elif pid == 1:
-            name = "System"  # macOS launchd
         else:
             try:
                 proc = psutil.Process(pid)
@@ -289,7 +292,15 @@ class TrafficAccumulator:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 name = "Unknown"
 
-        self._app_name_cache[pid] = name
+        self._app_name_cache[pid] = (name, now)
+
+        # Evict stale entries when cache grows too large
+        if len(self._app_name_cache) > self._PID_CACHE_MAX:
+            self._app_name_cache = {
+                k: v for k, v in self._app_name_cache.items()
+                if now - v[1] < 300  # Keep entries from last 5 minutes
+            }
+
         return name
 
     def get_port_table(self, current_time: Optional[float] = None) -> List[dict]:

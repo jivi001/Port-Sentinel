@@ -37,11 +37,13 @@ import uvicorn
 import msgpack
 import psutil
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import socketio
+import hmac
+from fastapi.security import APIKeyHeader
 
 # --- Project imports ---
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -65,11 +67,43 @@ logging.basicConfig(
 logger = logging.getLogger("sentinel.main")
 
 # --- Configuration ---
-HOST = os.environ.get("HOST", "0.0.0.0")
+HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8600"))
 EMIT_INTERVAL = 1.0  # 1Hz Socket.io push
 DB_FLUSH_INTERVAL = 60.0  # Flush traffic history to SQLite every 60s
 EVICT_INTERVAL = 3600.0  # Evict stale cache every 1h
+
+# --- CORS Origins ---
+_env_origins = os.environ.get("SENTINEL_CORS_ORIGINS", "")
+ALLOWED_ORIGINS = (
+    [o.strip() for o in _env_origins.split(",") if o.strip()]
+    if _env_origins
+    else [
+        "http://localhost:5173",
+        "http://localhost:8600",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8600",
+    ]
+)
+
+# --- Authentication ---
+SENTINEL_API_KEY = os.environ.get("SENTINEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_auth(request: Request, api_key: Optional[str] = Depends(_api_key_header)):
+    """Gate control endpoints: require API key or localhost access."""
+    if SENTINEL_API_KEY:
+        if not api_key or not hmac.compare_digest(api_key, SENTINEL_API_KEY):
+            raise HTTPException(status_code=401, detail="Invalid or missing API key. Set SENTINEL_API_KEY env var.")
+        return
+    # No API key configured → only allow localhost
+    client_host = request.client.host if request.client else None
+    if client_host not in ("127.0.0.1", "::1"):
+        raise HTTPException(
+            status_code=403,
+            detail="Control endpoints restricted to localhost. Set SENTINEL_API_KEY for remote access.",
+        )
 
 # --- OS Detection ---
 PLATFORM = platform.system()
@@ -132,7 +166,7 @@ shm: Optional[shared_memory.SharedMemory] = None
 # --- Socket.io ---
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins="*",
+    cors_allowed_origins=ALLOWED_ORIGINS,
     logger=False,
     engineio_logger=False,
 )
@@ -316,13 +350,20 @@ async def dispatcher_loop_async():
 
 # --- Cleanup ---
 
+_cleanup_done = False
+
+
 def cleanup():
     """
     Cleanup hook — runs on exit (atexit + SIGTERM).
 
     Removes all Sentinel_ firewall rules and stops the sniffer.
     """
-    global sniffer_process, dispatcher_running, shm
+    global sniffer_process, dispatcher_running, shm, _cleanup_done
+
+    if _cleanup_done:
+        return
+    _cleanup_done = True
 
     logger.info("Cleanup starting...")
     dispatcher_running = False
@@ -415,10 +456,10 @@ app = FastAPI(
 # CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
 
@@ -479,7 +520,7 @@ async def get_port_history(port: int, hours: int = 24):
 
 
 @app.post("/api/control/suspend/{pid}")
-async def suspend_process_endpoint(pid: int):
+async def suspend_process_endpoint(pid: int, _auth=Depends(require_auth)):
     """Soft Block: Suspend a process."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -498,7 +539,7 @@ async def suspend_process_endpoint(pid: int):
 
 
 @app.post("/api/control/resume/{pid}")
-async def resume_process_endpoint(pid: int):
+async def resume_process_endpoint(pid: int, _auth=Depends(require_auth)):
     """Resume a previously suspended process."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -517,7 +558,7 @@ async def resume_process_endpoint(pid: int):
 
 
 @app.post("/api/control/kill/{pid}")
-async def kill_process_endpoint(pid: int):
+async def kill_process_endpoint(pid: int, _auth=Depends(require_auth)):
     """Kill a process."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -536,7 +577,7 @@ async def kill_process_endpoint(pid: int):
 
 
 @app.post("/api/control/block/{port}")
-async def block_port_endpoint(port: int, protocol: str = "TCP"):
+async def block_port_endpoint(port: int, protocol: str = "TCP", _auth=Depends(require_auth)):
     """Hard Block: Add firewall rules to block a port."""
     if protocol.upper() not in ["TCP", "UDP"]:
         raise HTTPException(status_code=400, detail="Invalid protocol. Must be TCP or UDP.")
@@ -553,7 +594,7 @@ async def block_port_endpoint(port: int, protocol: str = "TCP"):
 
 
 @app.post("/api/control/unblock/{port}")
-async def unblock_port_endpoint(port: int):
+async def unblock_port_endpoint(port: int, _auth=Depends(require_auth)):
     """Remove firewall rules for a port."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -611,8 +652,11 @@ if _frontend_path:
     async def serve_spa_fallback(full_path: str):
         # Try to serve the exact file first (e.g. favicon.ico, robots.txt)
         file_path = os.path.join(_frontend_path, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
+        # Prevent path traversal — resolved path must stay within frontend dist
+        resolved = os.path.realpath(file_path)
+        safe_root = os.path.realpath(_frontend_path)
+        if resolved.startswith(safe_root) and os.path.isfile(resolved):
+            return FileResponse(resolved)
         # Otherwise return index.html for client-side routing
         return FileResponse(os.path.join(_frontend_path, "index.html"))
 
