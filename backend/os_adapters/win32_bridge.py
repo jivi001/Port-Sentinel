@@ -213,6 +213,12 @@ def block_port(port: int, protocol: str = "TCP") -> bool:
     """
     if not is_windows():
         raise FirewallRuleError("Windows firewall operations require Windows OS")
+        
+    if not (1 <= port <= 65535):
+        raise FirewallRuleError(f"Invalid port number: {port}. Must be 1-65535.")
+    if protocol.upper() not in ('TCP', 'UDP'):
+        raise FirewallRuleError(f"Invalid protocol: {protocol}. Must be TCP or UDP.")
+    protocol = protocol.upper()
 
     try:
         # Outbound rule
@@ -225,7 +231,8 @@ def block_port(port: int, protocol: str = "TCP") -> bool:
         ]
         result_out = subprocess.run(cmd_out, capture_output=True, text=True, timeout=10, errors='replace')
         if result_out.returncode != 0:
-            raise FirewallRuleError(f"Outbound rule failed: {result_out.stderr}")
+            logger.warning(f"netsh stderr: {result_out.stderr}")
+            raise FirewallRuleError(f"Failed to create outbound firewall rule for port {port}/{protocol}")
 
         # Inbound rule
         cmd_in = [
@@ -237,7 +244,8 @@ def block_port(port: int, protocol: str = "TCP") -> bool:
         ]
         result_in = subprocess.run(cmd_in, capture_output=True, text=True, timeout=10, errors='replace')
         if result_in.returncode != 0:
-            raise FirewallRuleError(f"Inbound rule failed: {result_in.stderr}")
+            logger.warning(f"netsh stderr: {result_in.stderr}")
+            raise FirewallRuleError(f"Failed to create inbound firewall rule for port {port}/{protocol}")
 
         logger.info(f"Hard blocked port {port}/{protocol} (Windows)")
         return True
@@ -253,6 +261,9 @@ def block_port(port: int, protocol: str = "TCP") -> bool:
 def unblock_port(port: int) -> bool:
     """Remove Sentinel_ firewall rules for a specific port."""
     if not is_windows():
+        return False
+        
+    if not (1 <= port <= 65535):
         return False
 
     def _rule_missing(stdout: str, stderr: str) -> bool:

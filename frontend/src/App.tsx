@@ -43,6 +43,12 @@ const App: React.FC = () => {
               <Route path="/history" element={<HistoricalLogsPage />} />
               <Route path="/network" element={<NetworkMapPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
+                  <h1 style={{ fontSize: '4rem', margin: 0, color: 'var(--accent-red)' }}>404</h1>
+                  <p>MODULE NOT FOUND</p>
+                </div>
+              } />
             </Routes>
           </Suspense>
         </main>

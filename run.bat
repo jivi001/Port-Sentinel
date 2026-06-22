@@ -83,5 +83,5 @@ popd
 
 echo.
 echo Closing backend...
-taskkill /FI "WINDOWTITLE eq Sentinel_Backend*" /T /F >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Sentinel_Backend*" /T >nul 2>&1
 pause

@@ -159,11 +159,12 @@ class SQLiteDB:
     def get_traffic_history(self, port: int, hours: int = 24) -> List[dict]:
         """Get traffic history for a port within the last N hours."""
         cutoff = time.time() - (hours * 3600)
-        cursor = self.conn.execute(
-            "SELECT * FROM traffic_history WHERE port = ? AND timestamp >= ? ORDER BY timestamp",
-            (port, cutoff),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        with self._write_lock:
+            cursor = self.conn.execute(
+                "SELECT * FROM traffic_history WHERE port = ? AND timestamp >= ? ORDER BY timestamp",
+                (port, cutoff),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def prune_old_traffic(self, max_age_hours: int = 24) -> int:
         """Delete traffic records older than max_age_hours."""
@@ -191,11 +192,12 @@ class SQLiteDB:
 
     def get_process_name(self, pid: int) -> Optional[str]:
         """Look up app name by PID."""
-        cursor = self.conn.execute(
-            "SELECT app_name FROM process_map WHERE pid = ?", (pid,)
-        )
-        row = cursor.fetchone()
-        return row["app_name"] if row else None
+        with self._write_lock:
+            cursor = self.conn.execute(
+                "SELECT app_name FROM process_map WHERE pid = ?", (pid,)
+            )
+            row = cursor.fetchone()
+            return row["app_name"] if row else None
 
     # --- Config Cache ---
 
@@ -212,11 +214,12 @@ class SQLiteDB:
 
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get a config value."""
-        cursor = self.conn.execute(
-            "SELECT value FROM config_cache WHERE key = ?", (key,)
-        )
-        row = cursor.fetchone()
-        return row["value"] if row else default
+        with self._write_lock:
+            cursor = self.conn.execute(
+                "SELECT value FROM config_cache WHERE key = ?", (key,)
+            )
+            row = cursor.fetchone()
+            return row["value"] if row else default
 
     # --- Blocked Ports ---
 
@@ -238,8 +241,9 @@ class SQLiteDB:
 
     def get_blocked_ports(self) -> List[dict]:
         """Get all currently blocked ports."""
-        cursor = self.conn.execute("SELECT * FROM blocked_ports ORDER BY port")
-        return [dict(row) for row in cursor.fetchall()]
+        with self._write_lock:
+            cursor = self.conn.execute("SELECT * FROM blocked_ports ORDER BY port")
+            return [dict(row) for row in cursor.fetchall()]
 
     def clear_blocked_ports(self) -> int:
         """Remove all blocked port records."""
@@ -265,10 +269,11 @@ class SQLiteDB:
 
     def get_audit_logs(self, limit: int = 100) -> List[dict]:
         """Get recent audit logs."""
-        cursor = self.conn.execute(
-            "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,)
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        with self._write_lock:
+            cursor = self.conn.execute(
+                "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,)
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     # --- Analytics & Forensics ---
 
@@ -278,32 +283,33 @@ class SQLiteDB:
         Returns total bytes transferred (KB) per application.
         """
         cutoff = time.time() - (hours * 3600)
-        # We sum KB/s snapshots (at ~1Hz) to estimate total KB
-        cursor = self.conn.execute(
-            """SELECT app_name, SUM(kb_s_in + kb_s_out) as total_kb, 
-                      MAX(risk_score) as max_risk
-               FROM traffic_history 
-               WHERE timestamp >= ? 
-               GROUP BY app_name 
-               ORDER BY total_kb DESC 
-               LIMIT ?""",
-            (cutoff, limit),
-        )
-        return [dict(row) for row in cursor.fetchall()]
+        with self._write_lock:
+            cursor = self.conn.execute(
+                """SELECT app_name, SUM(kb_s_in + kb_s_out) as total_kb, 
+                          MAX(risk_score) as max_risk
+                   FROM traffic_history 
+                   WHERE timestamp >= ? 
+                   GROUP BY app_name 
+                   ORDER BY total_kb DESC 
+                   LIMIT ?""",
+                (cutoff, limit),
+            )
+            return [dict(row) for row in cursor.fetchall()]
 
     def get_global_traffic_stats(self, hours: int = 24) -> dict:
         """Get aggregated traffic volume across the whole system."""
         cutoff = time.time() - (hours * 3600)
-        cursor = self.conn.execute(
-            """SELECT SUM(kb_s_in) as total_in_kb, SUM(kb_s_out) as total_out_kb
-               FROM traffic_history WHERE timestamp >= ?""",
-            (cutoff,),
-        )
-        row = cursor.fetchone()
-        return {
-            "total_in_mb": round((row["total_in_kb"] or 0) / 1024, 2),
-            "total_out_mb": round((row["total_out_kb"] or 0) / 1024, 2),
-        }
+        with self._write_lock:
+            cursor = self.conn.execute(
+                """SELECT SUM(kb_s_in) as total_in_kb, SUM(kb_s_out) as total_out_kb
+                   FROM traffic_history WHERE timestamp >= ?""",
+                (cutoff,),
+            )
+            row = cursor.fetchone()
+            return {
+                "total_in_mb": round((row["total_in_kb"] or 0) / 1024, 2),
+                "total_out_mb": round((row["total_out_kb"] or 0) / 1024, 2),
+            }
 
 
 # --- InfluxDB ---

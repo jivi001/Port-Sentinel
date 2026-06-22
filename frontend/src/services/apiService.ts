@@ -17,9 +17,19 @@ export const apiService = {
    * Internal fetch wrapper with fallback logic.
    */
   _call: async (path: string, options: RequestInit = {}) => {
+    const apiKey = localStorage.getItem('SENTINEL_API_KEY') || import.meta.env.VITE_SENTINEL_API_KEY || '';
+    const headers: Record<string, string> = { 
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>)
+    };
+    
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
+
     const requestInit: RequestInit = {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers,
     };
 
     const primaryBase = IS_DEV ? DEV_BACKEND_URL : PROXY_BASE;

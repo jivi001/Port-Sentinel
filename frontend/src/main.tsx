@@ -4,10 +4,17 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './assets/index.css';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+import ErrorBoundary from './components/ErrorBoundary';
+
+const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error('Failed to find the root element');
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>,
 );

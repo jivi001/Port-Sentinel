@@ -2,7 +2,7 @@
  * Sentinel — Professional Process Control
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useSocketContext } from '../hooks/SocketContext';
 import { apiService } from '../services/apiService';
 import ConfirmModal from '../components/ConfirmModal';
@@ -11,10 +11,18 @@ const ProcessControlPage: React.FC = () => {
   const { portTable } = useSocketContext();
   const [killPid, setKillPid] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   const showToast = (message: string, color: string) => {
     setToast({ message, color });
-    setTimeout(() => setToast(null), 3000);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => setToast(null), 3000);
   };
 
   const processes = useMemo(() => {

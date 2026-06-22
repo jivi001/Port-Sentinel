@@ -217,6 +217,13 @@ def block_port(port: int, protocol: str = "tcp", interface: str = "en0") -> bool
     """
     if not is_darwin():
         raise FirewallRuleError("pfctl operations require macOS")
+        
+    if not (1 <= port <= 65535):
+        raise FirewallRuleError(f"Invalid port number: {port}. Must be 1-65535.")
+    if protocol.lower() not in ('tcp', 'udp'):
+        raise FirewallRuleError(f"Invalid protocol: {protocol}. Must be tcp or udp.")
+    if not re.match(r'^[a-zA-Z0-9]+$', interface):
+        raise FirewallRuleError(f"Invalid interface name: {interface}")
 
     rule = f"block drop on {interface} proto {protocol} from any to any port {port}"
 
@@ -225,11 +232,14 @@ def block_port(port: int, protocol: str = "tcp", interface: str = "en0") -> bool
         _active_rules[port] = rule
         _write_pf_rules()
 
-        # Apply rules via pfctl
+        # Apply rules via pfctl to the specific anchor
         result = subprocess.run(
-            ["sudo", "pfctl", "-ef", PF_RULES_FILE],
+            ["sudo", "pfctl", "-a", PF_ANCHOR, "-f", PF_RULES_FILE],
             capture_output=True, text=True, timeout=10,
         )
+        
+        # Ensure pf is enabled
+        subprocess.run(["sudo", "pfctl", "-e"], capture_output=True, text=True, timeout=10)
 
         if result.returncode != 0:
             # pfctl returns 0 on success; some warnings go to stderr but are non-fatal
@@ -270,7 +280,8 @@ def unblock_port(port: int) -> bool:
 
 def _write_pf_rules() -> None:
     """Write all active Sentinel rules to the PF rules file."""
-    with open(PF_RULES_FILE, 'w') as f:
+    fd = os.open(PF_RULES_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
         f.write(f"# Sentinel PF Rules (auto-generated)\n")
         for port, rule in sorted(_active_rules.items()):
             f.write(f"{rule}\n")
@@ -281,13 +292,14 @@ def _reload_pf() -> None:
     try:
         if _active_rules:
             subprocess.run(
-                ["sudo", "pfctl", "-ef", PF_RULES_FILE],
+                ["sudo", "pfctl", "-a", PF_ANCHOR, "-f", PF_RULES_FILE],
                 capture_output=True, text=True, timeout=10,
             )
+            subprocess.run(["sudo", "pfctl", "-e"], capture_output=True, text=True, timeout=10)
         else:
-            # No rules: disable pf and clean up
+            # No rules: flush anchor rules
             subprocess.run(
-                ["sudo", "pfctl", "-d"],
+                ["sudo", "pfctl", "-a", PF_ANCHOR, "-Fr"],
                 capture_output=True, text=True, timeout=10,
             )
             # Remove rules file
@@ -308,9 +320,9 @@ def cleanup_all_rules() -> int:
     _active_rules.clear()
 
     try:
-        # Disable pf
+        # Flush anchor rules
         subprocess.run(
-            ["sudo", "pfctl", "-d"],
+            ["sudo", "pfctl", "-a", PF_ANCHOR, "-Fr"],
             capture_output=True, text=True, timeout=10,
         )
 

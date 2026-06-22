@@ -8,7 +8,27 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { decode } from '@msgpack/msgpack';
+import { z } from 'zod';
 import type { PortTable, SparklinePoint } from '../types';
+
+const PortEntrySchema = z.object({
+  port: z.number(),
+  pid: z.number(),
+  app_name: z.string(),
+  protocol: z.string(),
+  kb_s_in: z.number(),
+  kb_s_out: z.number(),
+  kb_s: z.number(),
+  direction: z.string().optional(),
+  status: z.string().optional(),
+  risk_score: z.number(),
+  remote_ip: z.string(),
+  org: z.string(),
+  country: z.string(),
+  timestamp: z.number(),
+});
+
+const PortTableSchema = z.array(PortEntrySchema);
 
 const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:8600' : '/';
 const SPARKLINE_WINDOW = 60; // 60 seconds of history
@@ -88,10 +108,15 @@ export function useSocket(): UseSocketReturn {
 
     socket.on('port_table', (raw: ArrayBuffer | Uint8Array) => {
       try {
-        const decoded = decode(raw instanceof Uint8Array ? raw : new Uint8Array(raw)) as PortTable;
-        processPortTable(decoded);
+        const decoded = decode(raw instanceof Uint8Array ? raw : new Uint8Array(raw));
+        const validated = PortTableSchema.parse(decoded) as PortTable;
+        processPortTable(validated);
       } catch (e) {
-        console.error('MsgPack decode error:', e);
+        if (e instanceof z.ZodError) {
+          console.error('Socket.io payload validation failed:', e.errors);
+        } else {
+          console.error('MsgPack decode error:', e);
+        }
       }
     });
 

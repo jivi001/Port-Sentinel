@@ -89,7 +89,7 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
 
             return (
               <div
-                key={entry.port}
+                key={`${entry.protocol}-${entry.port}-${entry.pid}`}
                 className={`port-row ${isHighRisk ? 'port-row--high-risk' : ''}`}
                 style={{
                   position: 'absolute',

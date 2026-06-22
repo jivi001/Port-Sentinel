@@ -2,7 +2,7 @@
  * Sentinel — Professional Settings Page
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiService } from '../services/apiService';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -13,10 +13,19 @@ const SettingsPage: React.FC = () => {
   const [toastColor, setToastColor] = useState<string>('var(--accent-green)');
   const [unblockPort, setUnblockPort] = useState<number | null>(null);
 
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
+
   const showToast = (msg: string, color: string = 'var(--accent-green)') => {
     setToastColor(color);
     setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => setToast(null), 3000);
   };
 
   const fetchBlocked = useCallback(async () => {

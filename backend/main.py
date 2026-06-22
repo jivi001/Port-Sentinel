@@ -24,9 +24,13 @@ import asyncio
 import logging
 import platform
 import threading
+import secrets
 from multiprocessing import shared_memory, Event as MPEvent, Lock as MPLock
 from contextlib import asynccontextmanager
 from typing import Optional, Any
+
+# Input validation
+from fastapi import Path as FastAPIPath, Query
 
 from dotenv import load_dotenv
 
@@ -58,6 +62,10 @@ from backend.core.policies import PolicyEngine
 from backend.core.watchdog import spawn_watchdog
 from backend.core.exceptions import SystemProcessProtectionError, FirewallRuleError
 
+# --- Constants & Keys ---
+SENTINEL_SHM_NAME = f"sentinel_shm_{secrets.token_hex(8)}"
+SENTINEL_HMAC_KEY = secrets.token_bytes(32)
+
 # --- Logging ---
 logging.basicConfig(
     level=logging.INFO,
@@ -68,7 +76,14 @@ logger = logging.getLogger("sentinel.main")
 
 # --- Configuration ---
 HOST = os.environ.get("HOST", "127.0.0.1")
-PORT = int(os.environ.get("PORT", "8600"))
+_raw_port = os.environ.get("PORT", "8600")
+try:
+    PORT = int(_raw_port)
+    if not (1 <= PORT <= 65535):
+        raise ValueError
+except ValueError:
+    logger.error(f"Invalid PORT value: {_raw_port!r}. Must be an integer 1-65535. Defaulting to 8600.")
+    PORT = 8600
 EMIT_INTERVAL = 1.0  # 1Hz Socket.io push
 DB_FLUSH_INTERVAL = 60.0  # Flush traffic history to SQLite every 60s
 EVICT_INTERVAL = 3600.0  # Evict stale cache every 1h
@@ -92,18 +107,11 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def require_auth(request: Request, api_key: Optional[str] = Depends(_api_key_header)):
-    """Gate control endpoints: require API key or localhost access."""
-    if SENTINEL_API_KEY:
-        if not api_key or not hmac.compare_digest(api_key, SENTINEL_API_KEY):
-            raise HTTPException(status_code=401, detail="Invalid or missing API key. Set SENTINEL_API_KEY env var.")
-        return
-    # No API key configured → only allow localhost
-    client_host = request.client.host if request.client else None
-    if client_host not in ("127.0.0.1", "::1"):
-        raise HTTPException(
-            status_code=403,
-            detail="Control endpoints restricted to localhost. Set SENTINEL_API_KEY for remote access.",
-        )
+    """Gate control endpoints: require API key."""
+    if not SENTINEL_API_KEY:
+        raise HTTPException(status_code=500, detail="SENTINEL_API_KEY is not configured on the server.")
+    if not api_key or not hmac.compare_digest(api_key, SENTINEL_API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
 
 # --- OS Detection ---
 PLATFORM = platform.system()
@@ -127,7 +135,7 @@ db = SQLiteDB()
 influx = InfluxDBWriter()
 shm_lock = MPLock()
 
-def _policy_action_handler(action: str, target: any, app_name: Optional[str] = None):
+def _policy_action_handler(action: str, target: Any, app_name: Optional[str] = None):
     """Callback for PolicyEngine to execute OS-level actions and log them."""
     if not os_bridge:
         return
@@ -135,6 +143,16 @@ def _policy_action_handler(action: str, target: any, app_name: Optional[str] = N
         msg = f"Automated {action} triggered on "
         severity = "warning"
         
+        if action in ("kill", "suspend"):
+            import psutil
+            try:
+                p = psutil.Process(target)
+                if app_name and p.name() != "Unknown" and p.name().lower() not in app_name.lower() and app_name.lower() not in p.name().lower():
+                    logging.warning(f"PID {target} recycled or name mismatch. Expected {app_name}, got {p.name()}. Aborting.")
+                    return
+            except psutil.NoSuchProcess:
+                return
+                
         if action == "kill":
             os_bridge.kill_process(target)
             msg += f"PID {target}"
@@ -238,7 +256,8 @@ async def dispatcher_loop_async():
     shm_wait_start = time.time()
     while dispatcher_running:
         try:
-            shm = shared_memory.SharedMemory(name=SHM_NAME, create=False, size=SHM_SIZE)
+            # SHM_SIZE = 65536 * 64 = 4194304
+            shm = shared_memory.SharedMemory(name=SENTINEL_SHM_NAME, create=False, size=4194304)
             logger.info("Dispatcher attached to shared memory")
             break
         except FileNotFoundError:
@@ -260,7 +279,7 @@ async def dispatcher_loop_async():
             sniffer_ports = []
             if not use_fallback:
                 try:
-                    sniffer_ports = read_all_active_ports(shm, lock=shm_lock)
+                    sniffer_ports = read_all_active_ports(shm, hmac_key=SENTINEL_HMAC_KEY, lock=shm_lock)
                 except Exception as e:
                     logger.debug(f"SHM read error: {e}")
 
@@ -285,25 +304,15 @@ async def dispatcher_loop_async():
 
             active_ports = list(merged_map.values())
 
-            # Process each port through the TrafficAccumulator
+            # Process each port through the TrafficAccumulator concurrently
             for entry in active_ports:
                 port, bytes_in, bytes_out, pid, protocol, active, risk_score, remote_ip = entry
-
                 snapshot = traffic_accumulator.process_port_data(
-                    port=port,
-                    bytes_in=bytes_in,
-                    bytes_out=bytes_out,
-                    pid=pid,
-                    protocol=protocol,
-                    timestamp=now,
-                    risk_score=risk_score,
-                    remote_ip=remote_ip,
+                    port=port, bytes_in=bytes_in, bytes_out=bytes_out,
+                    pid=pid, protocol=protocol, timestamp=now,
+                    risk_score=risk_score, remote_ip=remote_ip,
                 )
-
-                # Automated Policy Enforcement
                 policy_engine.evaluate(snapshot)
-
-                # Queue for database flush
                 pending_db_records.append({
                     "timestamp": snapshot.timestamp,
                     "port": snapshot.port,
@@ -315,6 +324,8 @@ async def dispatcher_loop_async():
                     "direction": snapshot.direction,
                     "risk_score": snapshot.risk_score,
                 })
+
+
 
             # Get the full port table for emission
             port_table = traffic_accumulator.get_port_table()
@@ -427,7 +438,12 @@ async def lifespan(app: FastAPI):
     # Start sniffer process (non-fatal if it fails — psutil fallback will be used)
     try:
         sniffer_stop_event = MPEvent()
-        sniffer_process = SnifferProcess(stop_event=sniffer_stop_event, lock=shm_lock)
+        sniffer_process = SnifferProcess(
+            stop_event=sniffer_stop_event, 
+            lock=shm_lock, 
+            shm_name=SENTINEL_SHM_NAME, 
+            hmac_key=SENTINEL_HMAC_KEY
+        )
         sniffer_process.start()
         logger.info(f"Sniffer process launched (PID={sniffer_process.pid})")
     except Exception as e:
@@ -436,7 +452,7 @@ async def lifespan(app: FastAPI):
 
     # Start dispatcher task
     dispatcher_running = True
-    asyncio.create_task(dispatcher_loop_async())
+    _dispatcher_task = asyncio.create_task(dispatcher_loop_async())  # Store reference to prevent GC
 
     # Start watchdog for persistence
     watchdog = spawn_watchdog()
@@ -466,8 +482,8 @@ app.add_middleware(
 # --- REST Endpoints ---
 
 @app.get("/api/info")
-async def root():
-    """Professional system information dashboard (JSON)."""
+async def root(_auth=Depends(require_auth)):
+    """Professional system information dashboard (JSON). Requires auth."""
     p = psutil.Process(os.getpid())
     return {
         "system": {
@@ -514,13 +530,19 @@ async def get_ports():
 
 
 @app.get("/api/ports/{port}/history")
-async def get_port_history(port: int, hours: int = 24):
+async def get_port_history(
+    port: int = FastAPIPath(..., ge=1, le=65535),
+    hours: int = Query(24, ge=1, le=720),
+):
     """Get traffic history for a specific port."""
     return db.get_traffic_history(port, hours=hours)
 
 
 @app.post("/api/control/suspend/{pid}")
-async def suspend_process_endpoint(pid: int, _auth=Depends(require_auth)):
+async def suspend_process_endpoint(
+    pid: int = FastAPIPath(..., ge=1, le=4194304),
+    _auth=Depends(require_auth),
+):
     """Soft Block: Suspend a process."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -533,13 +555,20 @@ async def suspend_process_endpoint(pid: int, _auth=Depends(require_auth)):
                 status_code=403,
                 detail=f"Suspend denied for PID {pid}. Run backend with elevated privileges.",
             )
+        db.insert_audit_log(
+            event_type="manual_suspend", message=f"Suspended PID {pid}",
+            severity="warning", details=f"Action: suspend, Target PID: {pid}",
+        )
         return {"success": success, "pid": pid, "action": "suspend"}
     except SystemProcessProtectionError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
 
 @app.post("/api/control/resume/{pid}")
-async def resume_process_endpoint(pid: int, _auth=Depends(require_auth)):
+async def resume_process_endpoint(
+    pid: int = FastAPIPath(..., ge=1, le=4194304),
+    _auth=Depends(require_auth),
+):
     """Resume a previously suspended process."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -552,13 +581,20 @@ async def resume_process_endpoint(pid: int, _auth=Depends(require_auth)):
                 status_code=403,
                 detail=f"Resume denied for PID {pid}. Run backend with elevated privileges.",
             )
+        db.insert_audit_log(
+            event_type="manual_resume", message=f"Resumed PID {pid}",
+            severity="info", details=f"Action: resume, Target PID: {pid}",
+        )
         return {"success": success, "pid": pid, "action": "resume"}
     except SystemProcessProtectionError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
 
 @app.post("/api/control/kill/{pid}")
-async def kill_process_endpoint(pid: int, _auth=Depends(require_auth)):
+async def kill_process_endpoint(
+    pid: int = FastAPIPath(..., ge=1, le=4194304),
+    _auth=Depends(require_auth),
+):
     """Kill a process."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -571,13 +607,21 @@ async def kill_process_endpoint(pid: int, _auth=Depends(require_auth)):
                 status_code=403,
                 detail=f"Kill denied for PID {pid}. Run backend with elevated privileges.",
             )
+        db.insert_audit_log(
+            event_type="manual_kill", message=f"Killed PID {pid}",
+            severity="critical", details=f"Action: kill, Target PID: {pid}",
+        )
         return {"success": success, "pid": pid, "action": "kill"}
     except SystemProcessProtectionError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
 
 @app.post("/api/control/block/{port}")
-async def block_port_endpoint(port: int, protocol: str = "TCP", _auth=Depends(require_auth)):
+async def block_port_endpoint(
+    port: int = FastAPIPath(..., ge=1, le=65535),
+    protocol: str = "TCP",
+    _auth=Depends(require_auth),
+):
     """Hard Block: Add firewall rules to block a port."""
     if protocol.upper() not in ["TCP", "UDP"]:
         raise HTTPException(status_code=400, detail="Invalid protocol. Must be TCP or UDP.")
@@ -588,19 +632,31 @@ async def block_port_endpoint(port: int, protocol: str = "TCP", _auth=Depends(re
         success = os_bridge.block_port(port, protocol)
         if success:
             db.add_blocked_port(port, block_type="hard", reason=f"User blocked {protocol}")
+            db.insert_audit_log(
+                event_type="manual_block", message=f"Blocked port {port}/{protocol}",
+                severity="critical", details=f"Action: block, Target port: {port}, Protocol: {protocol}",
+            )
         return {"success": success, "port": port, "action": "block"}
     except FirewallRuleError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Firewall block error for port {port}: {e}")
+        raise HTTPException(status_code=500, detail="Firewall operation failed. Check server logs for details.")
 
 
 @app.post("/api/control/unblock/{port}")
-async def unblock_port_endpoint(port: int, _auth=Depends(require_auth)):
+async def unblock_port_endpoint(
+    port: int = FastAPIPath(..., ge=1, le=65535),
+    _auth=Depends(require_auth),
+):
     """Remove firewall rules for a port."""
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
     success = os_bridge.unblock_port(port)
     if success:
         db.remove_blocked_port(port)
+        db.insert_audit_log(
+            event_type="manual_unblock", message=f"Unblocked port {port}",
+            severity="warning", details=f"Action: unblock, Target port: {port}",
+        )
     return {"success": success, "port": port, "action": "unblock"}
 
 
@@ -610,13 +666,20 @@ async def get_blocked_ports():
     return db.get_blocked_ports()
 
 @app.get("/api/analytics/top-talkers")
-async def get_top_talkers(hours: int = 24, limit: int = 10):
-    """Analytics: Identify applications with highest traffic."""
+async def get_top_talkers(
+    hours: int = Query(24, ge=1, le=720),
+    limit: int = Query(10, ge=1, le=1000),
+    _auth=Depends(require_auth),
+):
+    """Analytics: Identify applications with highest traffic. Requires auth."""
     return db.get_top_talkers(hours=hours, limit=limit)
 
 @app.get("/api/audit/logs")
-async def get_audit_logs(limit: int = 100):
-    """Forensics: Get recent system and security events."""
+async def get_audit_logs(
+    limit: int = Query(100, ge=1, le=1000),
+    _auth=Depends(require_auth),
+):
+    """Forensics: Get recent system and security events. Requires auth."""
     return db.get_audit_logs(limit=limit)
 
 
@@ -669,6 +732,16 @@ else:
 
 def main() -> None:
     """Run the backend ASGI server."""
+    # Security guard: warn loudly when binding to all interfaces without an API key
+    if HOST == "0.0.0.0" and not SENTINEL_API_KEY:
+        logger.warning(
+            "\n" + "=" * 72 + "\n"
+            "  ⚠️  SECURITY WARNING: Binding to 0.0.0.0 WITHOUT an API key!\n"
+            "  All control endpoints (kill/block/suspend) are UNAUTHENTICATED.\n"
+            "  Set SENTINEL_API_KEY env var or bind to 127.0.0.1.\n"
+            + "=" * 72
+        )
+
     # Wrap FastAPI with Socket.io ASGI app at runtime
     socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
     

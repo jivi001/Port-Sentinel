@@ -10,6 +10,7 @@ export interface PortEntry {
   protocol: string;   // "TCP" | "UDP"
   kb_s_in: number;    // KB/s inbound
   kb_s_out: number;   // KB/s outbound
+  kb_s: number;       // Total KB/s
   direction: string;  // "IN" | "OUT" | "BOTH"
   status: string;     // "LISTEN" | "ESTABLISHED" | etc.
   risk_score: number; // Threat score 0-10

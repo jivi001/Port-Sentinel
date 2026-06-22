@@ -1,7 +1,7 @@
 # Port Sentinel Backend Dockerfile
 # NOTE: Run container with cap-add NET_ADMIN,NET_RAW for packet sniffing.
 
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:4ce258529fb3e89a421ea9d1af465710609b626e279bfe4de8556cc0376269b6
 
 WORKDIR /app
 
@@ -11,10 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap0.8 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
-
+COPY pyproject.toml /app/
 COPY backend /app/backend
+
+RUN pip install --no-cache-dir .
 
 # Create non-root user for the application
 # NOTE: Packet capture still works via cap_add in docker-compose

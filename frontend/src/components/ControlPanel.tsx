@@ -2,7 +2,7 @@
  * Sentinel — Professional Search Control
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface ControlPanelProps {
   filter: string;
@@ -10,13 +10,28 @@ interface ControlPanelProps {
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({ filter, onFilterChange }) => {
+  const [localFilter, setLocalFilter] = useState(filter);
+
+  useEffect(() => {
+    if (filter !== localFilter) {
+      setLocalFilter(filter);
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    const handler = window.setTimeout(() => {
+      onFilterChange(localFilter);
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [localFilter, onFilterChange]);
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, maxWidth: '400px' }}>
       <input
         type="text"
         placeholder="SEARCH ACTIVE NODES..."
-        value={filter}
-        onChange={(e) => onFilterChange(e.target.value)}
+        value={localFilter}
+        onChange={(e) => setLocalFilter(e.target.value)}
         autoComplete="off"
         spellCheck={false}
         style={{

@@ -38,8 +38,17 @@ class SentinelWatchdog:
             try:
                 # Check if main process exists
                 if not psutil.pid_exists(self.main_pid):
-                    logger.warning("MAIN PROCESS LOST! Attempting emergency restart...")
-                    self._restart_sentinel()
+                    restarts = int(os.environ.get("SENTINEL_RESTARTS", "0"))
+                    if restarts >= 5:
+                        logger.critical("Maximum restart limit (5) reached. Watchdog giving up.")
+                        break
+                    
+                    # Exponential backoff
+                    backoff = min(60, 2 ** restarts)
+                    logger.warning(f"MAIN PROCESS LOST! Attempting emergency restart {restarts + 1}/5 in {backoff}s...")
+                    time.sleep(backoff)
+                    
+                    self._restart_sentinel(restarts + 1)
                     break # Exit watchdog as a new one will be spawned
                 
                 # Check if it's responsive (optional: check health endpoint)
@@ -50,13 +59,14 @@ class SentinelWatchdog:
             
             time.sleep(5)
 
-    def _restart_sentinel(self):
+    def _restart_sentinel(self, new_count: int):
         """Launch a new instance of the sentinel backend."""
         try:
             # Re-run the current entry point
             executable = sys.executable
             args = [executable, "-m", "backend.main"]
             env = os.environ.copy()
+            env["SENTINEL_RESTARTS"] = str(new_count)
             
             # Start in new session to decouple from the dying process
             if os.name == 'nt':

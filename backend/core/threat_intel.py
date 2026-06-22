@@ -10,7 +10,9 @@ import threading
 import time
 import os
 import requests
+import ipaddress
 from typing import Set, Dict, Optional
+from collections import OrderedDict
 
 logger = logging.getLogger("sentinel.threat_intel")
 
@@ -24,8 +26,11 @@ class ThreatIntel:
     """
     def __init__(self):
         self._malicious_ips: Set[str] = set()
-        self._metadata_cache: Dict[str, dict] = {} # IP -> {org, city, country, risk}
+        self._metadata_cache: OrderedDict[str, dict] = OrderedDict() # IP -> {org, city, country, risk}
+        self._cache_timestamps: Dict[str, float] = {}
         self._lock = threading.Lock()
+        self._MAX_CACHE_SIZE = 10000
+        self._CACHE_TTL = 3600.0
         
         # Initial bootstrap
         self._bootstrap_list()
@@ -43,30 +48,54 @@ class ThreatIntel:
         """
         if not ip or ip.startswith("127.") or ip.startswith("192.168.") or ip.startswith("10."):
             return {"org": "Local Network", "country": "LOCAL", "risk": 0}
+            
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            return {"org": "Invalid IP", "country": "??", "risk": 0}
 
         with self._lock:
             if ip in self._metadata_cache:
-                return self._metadata_cache[ip]
+                if time.time() - self._cache_timestamps.get(ip, 0) < self._CACHE_TTL:
+                    self._metadata_cache.move_to_end(ip)
+                    return self._metadata_cache[ip]
+                else:
+                    del self._metadata_cache[ip]
+                    if ip in self._cache_timestamps:
+                        del self._cache_timestamps[ip]
 
-        # Fetch from ipinfo.io
-        try:
-            url = f"https://ipinfo.io/{ip}/json?token={IPINFO_TOKEN}"
-            response = requests.get(url, timeout=2)
-            if response.status_code == 200:
-                data = response.json()
-                metadata = {
-                    "org": data.get("org", "Unknown Provider"),
-                    "city": data.get("city", "Unknown"),
-                    "country": data.get("country", "??"),
-                    "risk": 10 if ip in self._malicious_ips else 0
-                }
-                with self._lock:
-                    self._metadata_cache[ip] = metadata
-                return metadata
-        except Exception as e:
-            logger.debug(f"IPInfo lookup failed for {ip}: {e}")
+        def _fetch_background():
+            try:
+                url = f"https://ipinfo.io/{ip}/json"
+                headers = {"Authorization": f"Bearer {IPINFO_TOKEN}"} if IPINFO_TOKEN else {}
+                response = requests.get(url, headers=headers, timeout=2)
+                if response.status_code == 200:
+                    data = response.json()
+                    metadata = {
+                        "org": data.get("org", "Unknown Provider"),
+                        "city": data.get("city", "Unknown"),
+                        "country": data.get("country", "??"),
+                        "risk": 10 if ip in self._malicious_ips else 0
+                    }
+                    with self._lock:
+                        self._metadata_cache[ip] = metadata
+                        self._cache_timestamps[ip] = time.time()
+                        if len(self._metadata_cache) > self._MAX_CACHE_SIZE:
+                            oldest_ip, _ = self._metadata_cache.popitem(last=False)
+                            if oldest_ip in self._cache_timestamps:
+                                del self._cache_timestamps[oldest_ip]
+            except Exception as e:
+                logger.debug(f"IPInfo lookup failed for {ip}: {e}")
+
+        # Cache miss - return placeholder and fetch in background
+        with self._lock:
+            # Mark as pending to prevent multiple threads fetching the same IP
+            self._metadata_cache[ip] = {"org": "Resolving...", "country": "??", "risk": 0}
+            self._cache_timestamps[ip] = time.time()
         
-        return {"org": "Unknown", "country": "??", "risk": 0}
+        threading.Thread(target=_fetch_background, daemon=True).start()
+        
+        return {"org": "Resolving...", "country": "??", "risk": 0}
 
     def is_malicious(self, ip: str) -> bool:
         return ip in self._malicious_ips

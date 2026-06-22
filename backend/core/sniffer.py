@@ -39,9 +39,9 @@ logger = logging.getLogger("sentinel.sniffer")
 
 # --- Constants ---
 MAX_PORTS = 65536
-ENTRY_SIZE = 32  # bytes per port entry
+ENTRY_SIZE = 64  # 32 bytes data + 32 bytes HMAC
+SHM_NAME = "sentinel_traffic_shm"  # Fallback
 SHM_SIZE = MAX_PORTS * ENTRY_SIZE
-SHM_NAME = "sentinel_traffic_shm"
 CAPTURE_INTERVAL = 0.1  # 100ms = 10Hz
 
 # Struct format for a single port entry
@@ -78,11 +78,15 @@ class SnifferProcess(multiprocessing.Process):
 
     def __init__(self, interface: Optional[str] = None, 
                  stop_event: Optional[multiprocessing.Event] = None,
-                 lock: Optional[multiprocessing.Lock] = None):
+                 lock: Optional[multiprocessing.Lock] = None,
+                 shm_name: str = "sentinel_traffic_shm",
+                 hmac_key: bytes = b""):
         super().__init__(daemon=True)
         self.interface = interface
         self.stop_event = stop_event or multiprocessing.Event()
         self.lock = lock or multiprocessing.Lock()
+        self.shm_name = shm_name
+        self.hmac_key = hmac_key
         self._shm: Optional[shared_memory.SharedMemory] = None
         # Local accumulation buffer: port -> (bytes_in, bytes_out, pid, proto)
         self._accum: Dict[int, list] = {}
@@ -90,13 +94,13 @@ class SnifferProcess(multiprocessing.Process):
     def _init_shared_memory(self) -> shared_memory.SharedMemory:
         """Create or attach to the shared memory segment."""
         try:
-            shm = shared_memory.SharedMemory(name=SHM_NAME, create=True, size=SHM_SIZE)
+            shm = shared_memory.SharedMemory(name=self.shm_name, create=True, size=SHM_SIZE)
             # Zero-initialize
             shm.buf[:SHM_SIZE] = b'\x00' * SHM_SIZE
-            logger.info(f"Created shared memory '{SHM_NAME}' ({SHM_SIZE} bytes)")
+            logger.info(f"Created shared memory '{self.shm_name}' ({SHM_SIZE} bytes)")
         except FileExistsError:
-            shm = shared_memory.SharedMemory(name=SHM_NAME, create=False, size=SHM_SIZE)
-            logger.info(f"Attached to existing shared memory '{SHM_NAME}'")
+            shm = shared_memory.SharedMemory(name=self.shm_name, create=False, size=SHM_SIZE)
+            logger.info(f"Attached to existing shared memory '{self.shm_name}'")
         return shm
 
     def _write_port_entry(self, port: int, bytes_in: int, bytes_out: int,
@@ -109,6 +113,8 @@ class SnifferProcess(multiprocessing.Process):
         
         # Convert string IP to 4 bytes
         import socket
+        import hmac
+        import hashlib
         try:
             ip_bytes = socket.inet_aton(remote_ip)
         except (OSError, ValueError):
@@ -119,7 +125,8 @@ class SnifferProcess(multiprocessing.Process):
         bytes_out = bytes_out % (2**64)
         
         data = PORT_ENTRY_STRUCT.pack(port, bytes_in, bytes_out, pid, protocol, active, risk_score, ip_bytes)
-        self._shm.buf[offset:offset + ENTRY_SIZE] = data
+        mac = hmac.new(self.hmac_key, data, hashlib.sha256).digest()
+        self._shm.buf[offset:offset + ENTRY_SIZE] = data + mac
 
     def packet_callback(self, packet) -> None:
         """
@@ -274,15 +281,24 @@ class SnifferProcess(multiprocessing.Process):
 
 
 def read_port_entry(shm: shared_memory.SharedMemory,
-                    port: int) -> Optional[Tuple[int, int, int, int, int, int, int, str]]:
+                    port: int, hmac_key: bytes) -> Optional[Tuple[int, int, int, int, int, int, int, str]]:
     """
-    Read a single port entry from shared memory.
+    Read a single port entry from shared memory, verifying HMAC.
 
     Returns: (port, bytes_in, bytes_out, pid, protocol, active, risk_score, remote_ip) 
-    or None if inactive.
+    or None if inactive or invalid.
     """
+    import hmac
+    import hashlib
     offset = port * ENTRY_SIZE
-    data = bytes(shm.buf[offset:offset + ENTRY_SIZE])
+    raw = bytes(shm.buf[offset:offset + ENTRY_SIZE])
+    data = raw[:32]
+    mac = raw[32:]
+
+    expected_mac = hmac.new(hmac_key, data, hashlib.sha256).digest()
+    if not hmac.compare_digest(mac, expected_mac):
+        return None
+
     entry = PORT_ENTRY_STRUCT.unpack(data)
     # entry = (port, bytes_in, bytes_out, pid, protocol, active, risk_score, ip_bytes, ...)
     if entry[5] == 0:  # not active
@@ -297,25 +313,22 @@ def read_port_entry(shm: shared_memory.SharedMemory,
     return (*entry[:7], remote_ip)
 
 
-def read_all_active_ports(shm: shared_memory.SharedMemory, lock: Optional[multiprocessing.Lock] = None) -> list:
+def read_all_active_ports(shm: shared_memory.SharedMemory, hmac_key: bytes, lock: Optional[multiprocessing.Lock] = None) -> list:
     """
     Read all active port entries from shared memory.
 
     Returns list of (port, bytes_in, bytes_out, pid, protocol, active, risk_score, remote_ip) tuples.
-
-    Optimized: checks the active-flag byte (offset 23 in each 32-byte entry)
-    before doing a full struct.unpack, skipping ~99.9% of inactive ports.
     """
     active = []
 
     def _scan():
         buf = shm.buf
         for port in range(MAX_PORTS):
-            # Fast path: active flag is byte 23 within each 32-byte entry
+            # Fast path: active flag is byte 23 within each 64-byte entry
             if buf[port * ENTRY_SIZE + 23] == 0:
                 continue
-            # Only unpack entries that are actually active
-            entry = read_port_entry(shm, port)
+            # Unpack and verify HMAC
+            entry = read_port_entry(shm, port, hmac_key)
             if entry is not None:
                 active.append(entry)
 
