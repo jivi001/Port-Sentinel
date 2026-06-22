@@ -115,9 +115,9 @@ class TestAtexitCleanupDarwin:
                 mock_run.return_value = MagicMock(returncode=0)
                 darwin_bridge.cleanup_all_rules()
 
-            # Should have called "sudo pfctl -d"
+            # Should have called "sudo pfctl -a com.sentinel -Fr"
             pfctl_calls = [c for c in mock_run.call_args_list
-                           if "pfctl" in str(c) and "-d" in str(c)]
+                           if "pfctl" in str(c) and "-Fr" in str(c)]
             assert len(pfctl_calls) >= 1
         finally:
             darwin_bridge._active_rules.clear()

@@ -61,7 +61,9 @@ def write_port_entry(shm, port: int, bytes_in: int, bytes_out: int,
         ip_bytes = b'\x00\x00\x00\x00'
     offset = port * ENTRY_SIZE
     data = PORT_ENTRY_STRUCT.pack(port, bytes_in, bytes_out, pid, protocol, active, risk_score, ip_bytes)
-    shm.buf[offset:offset + ENTRY_SIZE] = data
+    import hmac, hashlib
+    mac = hmac.new(b"test_key", data, hashlib.sha256).digest()
+    shm.buf[offset:offset + ENTRY_SIZE] = data + mac
 
 
 def read_port_entry_raw(shm, port: int):

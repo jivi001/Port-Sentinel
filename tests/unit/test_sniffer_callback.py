@@ -144,7 +144,7 @@ class TestSharedMemoryIO:
 
     def test_read_active_entry(self, populated_shm):
         """Active port entry should be read correctly."""
-        entry = read_port_entry(populated_shm, 80)
+        entry = read_port_entry(populated_shm, 80, b"test_key")
         assert entry is not None
         port, bytes_in, bytes_out, pid, proto, active, risk, ip = entry
         assert port == 80
@@ -155,11 +155,11 @@ class TestSharedMemoryIO:
 
     def test_read_inactive_entry(self, fake_shm):
         """Inactive (zeroed) port should return None."""
-        entry = read_port_entry(fake_shm, 12345)
+        entry = read_port_entry(fake_shm, 12345, b"test_key")
         assert entry is None
 
     def test_read_udp_entry(self, populated_shm):
         """UDP port (53) should have protocol=1."""
-        entry = read_port_entry(populated_shm, 53)
+        entry = read_port_entry(populated_shm, 53, b"test_key")
         assert entry is not None
         assert entry[4] == 1  # protocol = UDP

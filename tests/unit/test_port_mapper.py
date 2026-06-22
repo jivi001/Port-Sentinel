@@ -66,7 +66,8 @@ class TestAppNameResolution:
     def test_cache_hit_avoids_psutil_call(self):
         """Cached PID should not call psutil.Process again."""
         acc = TrafficAccumulator()
-        acc._app_name_cache[1234] = "cached_app"
+        import time
+        acc._app_name_cache[1234] = ("cached_app", time.time())
         name = acc._resolve_app_name(1234)
         assert name == "cached_app"
 
@@ -83,4 +84,4 @@ class TestAppNameResolution:
             acc = TrafficAccumulator()
             acc._resolve_app_name(7777)
         assert 7777 in acc._app_name_cache
-        assert acc._app_name_cache[7777] == "notepad.exe"
+        assert acc._app_name_cache[7777][0] == "notepad.exe"
