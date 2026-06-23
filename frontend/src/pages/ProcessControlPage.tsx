@@ -62,47 +62,48 @@ const ProcessControlPage: React.FC = () => {
   };
 
   return (
-    <div className="page-container h-full w-full flex flex-col">
-      <header className="page-header flex justify-between items-center mb-4 shrink-0">
-        <h1 className="page-title text-3xl font-bold text-text-main tracking-tight">Process Management</h1>
-        <div className="flex items-center gap-3">
+    <div className="page-container">
+      <header className="page-header">
+        <h1 className="page-title">Process Management</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {toast && (
-            <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-border-main font-bold" style={{ color: toast.color }}>
+            <div className="connection-badge" style={{ color: toast.color }}>
               {toast.message}
             </div>
           )}
-          <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-border-main text-primary font-bold">
+          <div className="connection-badge">
             {processes.length} ACTIVE_PROCESSES
           </div>
         </div>
       </header>
 
-      <div className="bg-surface border border-border-main rounded-xl shadow-lg flex flex-col overflow-hidden flex-1 min-h-0">
-        <div className="p-4 bg-secondary/50 border-b border-border-main flex justify-between items-center">
-          <h2 className="text-xs font-bold text-text-muted uppercase tracking-widest">Network-Active Processes</h2>
+      <section className="sentinel-section" style={{ flex: 1 }}>
+        <div className="sentinel-section__header">
+          <h2 className="sentinel-section__title">Network-Active Processes</h2>
         </div>
         
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex items-center p-4 bg-secondary border-b border-border-main text-xs font-bold text-text-muted uppercase tracking-widest gap-4">
-            <div className="w-20">PID</div>
-            <div className="flex-[1.5] min-w-0">APPLICATION_NAME</div>
-            <div className="w-36">ACTIVE_PORTS</div>
-            <div className="w-36 text-right">INBOUND</div>
-            <div className="w-36 text-right">OUTBOUND</div>
-            <div className="w-36 text-right">ACTION</div>
+        <div className="data-table-container">
+          <div className="data-table-header">
+            <div className="col-sm">PID</div>
+            <div className="col-lg">APPLICATION_NAME</div>
+            <div className="col-md">ACTIVE_PORTS</div>
+            <div className="col-md col-right">INBOUND</div>
+            <div className="col-md col-right">OUTBOUND</div>
+            <div className="col-md col-right">ACTION</div>
           </div>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="data-table-body">
             {processes.map((proc) => (
-              <div key={proc.pid} className="flex items-center p-4 border-b border-border-main hover:bg-hover transition-colors gap-4">
-                <div className="w-20 font-mono text-text-muted font-semibold">{proc.pid}</div>
-                <div className="flex-[1.5] min-w-0 font-bold text-text-main truncate">{proc.app_name}</div>
-                <div className="w-36 font-mono text-primary font-semibold truncate">{Array.from(proc.ports).join(', ')}</div>
-                <div className="w-36 text-right font-mono text-primary font-semibold">{proc.kb_s_in.toFixed(1)} KB/s</div>
-                <div className="w-36 text-right font-mono text-warning font-semibold">{proc.kb_s_out.toFixed(1)} KB/s</div>
-                <div className="w-36 text-right">
+              <div key={proc.pid} className="data-row">
+                <div className="col-sm mono" style={{ color: 'var(--text-muted)' }}>{proc.pid}</div>
+                <div className="col-lg" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{proc.app_name}</div>
+                <div className="col-md mono" style={{ color: 'var(--accent-blue)' }}>{Array.from(proc.ports).join(', ')}</div>
+                <div className="col-md col-right mono" style={{ color: 'var(--accent-blue)' }}>{proc.kb_s_in.toFixed(1)} KB/s</div>
+                <div className="col-md col-right mono" style={{ color: 'var(--accent-orange)' }}>{proc.kb_s_out.toFixed(1)} KB/s</div>
+                <div className="col-md col-right">
                   <button 
-                    className="px-4 py-2 rounded-md font-bold text-xs bg-transparent text-danger hover:bg-danger/10 hover:text-text-main transition-colors border border-transparent hover:border-danger/30"
+                    className="btn" 
+                    style={{ color: 'var(--accent-red)' }} 
                     onClick={() => setTargetPid({ pid: proc.pid, appName: proc.app_name })}
                   >
                     SUSPEND
@@ -112,7 +113,7 @@ const ProcessControlPage: React.FC = () => {
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
       <ConfirmModal 
         open={!!targetPid} 
