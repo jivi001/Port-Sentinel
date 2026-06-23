@@ -1,20 +1,23 @@
 @import "tailwindcss";
 
 @theme {
-  --color-background: #0B0F19;
-  --color-surface: #111827;
-  --color-primary: #3B82F6;
-  --color-secondary: #1F2937;
-  --color-accent: #10B981;
-  --color-danger: #EF4444;
-  --color-warning: #F59E0B;
+  --color-background: var(--bg-primary);
+  --color-surface: var(--bg-surface);
+  --color-primary: var(--accent-blue);
+  --color-secondary: var(--bg-secondary);
+  --color-accent: var(--accent-green);
+  --color-danger: var(--accent-red);
+  --color-warning: var(--accent-orange);
+  --color-border-main: var(--border-default);
+  --color-text-main: var(--text-primary);
+  --color-text-muted: var(--text-secondary);
 }
 
 @layer base {
   :root {
-    /* --- Cyber Midnight Core --- */
-    --bg-darkest: #05070a;
-    --bg-primary: #0b0e14;
+    /* --- Cyber Midnight Core (Dark Mode Default) --- */
+    --bg-primary: #05070a;
+    --bg-surface: #0b0e14;
     --bg-secondary: #11161d;
     --bg-card: rgba(17, 22, 29, 0.8);
     --bg-glass: rgba(255, 255, 255, 0.025);
@@ -45,15 +48,45 @@
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   }
 
+  :root[data-theme="light"] {
+    /* --- Crisp Daylight Core (Light Mode) --- */
+    --bg-primary: #f8fafc;
+    --bg-surface: #ffffff;
+    --bg-secondary: #f1f5f9;
+    --bg-card: rgba(255, 255, 255, 0.9);
+    --bg-glass: rgba(0, 0, 0, 0.025);
+    --bg-hover: rgba(0, 0, 0, 0.06);
+
+    /* --- Text Hierarchy --- */
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --text-dim: #cbd5e1;
+
+    /* --- Professional Accents --- */
+    --accent-blue: #2563eb;
+    --accent-blue-dim: rgba(37, 99, 235, 0.1);
+    --accent-orange: #d97706;
+    --accent-orange-dim: rgba(217, 119, 6, 0.1);
+    --accent-red: #dc2626;
+    --accent-green: #059669;
+    --accent-purple: #7c3aed;
+
+    /* --- Borders & Depth --- */
+    --border-dim: rgba(0, 0, 0, 0.05);
+    --border-default: rgba(0, 0, 0, 0.1);
+    --border-active: rgba(37, 99, 235, 0.3);
+  }
+
   body {
-    @apply bg-background text-white antialiased font-sans overflow-hidden;
+    @apply bg-background text-text-main antialiased font-sans overflow-hidden transition-colors duration-300;
   }
 }
 
 /* ---------- Scrollbars ---------- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #484f58; }
+::-webkit-scrollbar-thumb { background: var(--text-dim); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* React Grid Layout specific overrides */
 .react-grid-item.react-grid-placeholder {

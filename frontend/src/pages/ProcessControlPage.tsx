@@ -64,26 +64,26 @@ const ProcessControlPage: React.FC = () => {
   return (
     <div className="page-container h-full w-full flex flex-col">
       <header className="page-header flex justify-between items-center mb-4 shrink-0">
-        <h1 className="page-title text-3xl font-bold text-white tracking-tight">Process Management</h1>
+        <h1 className="page-title text-3xl font-bold text-text-main tracking-tight">Process Management</h1>
         <div className="flex items-center gap-3">
           {toast && (
-            <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-gray-800 font-bold" style={{ color: toast.color }}>
+            <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-border-main font-bold" style={{ color: toast.color }}>
               {toast.message}
             </div>
           )}
-          <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-gray-800 text-primary font-bold">
+          <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-border-main text-primary font-bold">
             {processes.length} ACTIVE_PROCESSES
           </div>
         </div>
       </header>
 
-      <div className="bg-surface border border-gray-800 rounded-xl shadow-lg flex flex-col overflow-hidden flex-1 min-h-0">
-        <div className="p-4 bg-gray-900 border-b border-gray-800 flex justify-between items-center">
-          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Network-Active Processes</h2>
+      <div className="bg-surface border border-border-main rounded-xl shadow-lg flex flex-col overflow-hidden flex-1 min-h-0">
+        <div className="p-4 bg-secondary/50 border-b border-border-main flex justify-between items-center">
+          <h2 className="text-xs font-bold text-text-muted uppercase tracking-widest">Network-Active Processes</h2>
         </div>
         
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex items-center p-4 bg-secondary border-b border-gray-800 text-xs font-bold text-gray-500 uppercase tracking-widest gap-4">
+          <div className="flex items-center p-4 bg-secondary border-b border-border-main text-xs font-bold text-text-muted uppercase tracking-widest gap-4">
             <div className="w-20">PID</div>
             <div className="flex-[1.5] min-w-0">APPLICATION_NAME</div>
             <div className="w-36">ACTIVE_PORTS</div>
@@ -94,15 +94,15 @@ const ProcessControlPage: React.FC = () => {
           
           <div className="flex-1 overflow-y-auto">
             {processes.map((proc) => (
-              <div key={proc.pid} className="flex items-center p-4 border-b border-gray-800 hover:bg-gray-800/50 transition-colors gap-4">
-                <div className="w-20 font-mono text-gray-400 font-semibold">{proc.pid}</div>
-                <div className="flex-[1.5] min-w-0 font-bold text-white truncate">{proc.app_name}</div>
+              <div key={proc.pid} className="flex items-center p-4 border-b border-border-main hover:bg-hover transition-colors gap-4">
+                <div className="w-20 font-mono text-text-muted font-semibold">{proc.pid}</div>
+                <div className="flex-[1.5] min-w-0 font-bold text-text-main truncate">{proc.app_name}</div>
                 <div className="w-36 font-mono text-primary font-semibold truncate">{Array.from(proc.ports).join(', ')}</div>
                 <div className="w-36 text-right font-mono text-primary font-semibold">{proc.kb_s_in.toFixed(1)} KB/s</div>
                 <div className="w-36 text-right font-mono text-warning font-semibold">{proc.kb_s_out.toFixed(1)} KB/s</div>
                 <div className="w-36 text-right">
                   <button 
-                    className="px-4 py-2 rounded-md font-bold text-xs bg-transparent text-danger hover:bg-danger/10 hover:text-white transition-colors border border-transparent hover:border-danger/30"
+                    className="px-4 py-2 rounded-md font-bold text-xs bg-transparent text-danger hover:bg-danger/10 hover:text-text-main transition-colors border border-transparent hover:border-danger/30"
                     onClick={() => setTargetPid({ pid: proc.pid, appName: proc.app_name })}
                   >
                     SUSPEND

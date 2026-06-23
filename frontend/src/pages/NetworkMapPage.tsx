@@ -45,14 +45,14 @@ const NetworkMapPage: React.FC = () => {
   return (
     <div className="page-container h-full w-full flex flex-col">
       <header className="page-header flex justify-between items-center mb-4 shrink-0">
-        <h1 className="page-title text-3xl font-bold text-white tracking-tight">Global Threat Intelligence</h1>
-        <div className={`connection-badge ${connected ? 'text-accent' : 'text-danger'} flex items-center gap-2 px-4 py-2 bg-surface rounded-full border border-gray-800`}>
+        <h1 className="page-title text-3xl font-bold text-text-main tracking-tight">Global Threat Intelligence</h1>
+        <div className={`connection-badge ${connected ? 'text-accent' : 'text-danger'} flex items-center gap-2 px-4 py-2 bg-surface rounded-full border border-border-main`}>
           <span className={`w-2 h-2 rounded-full ${connected ? 'bg-accent animate-pulse' : 'bg-danger'}`} />
           {connected ? 'TOPOLOGY_SYNC_ACTIVE' : 'OFFLINE'}
         </div>
       </header>
 
-      <div className="bg-surface border border-gray-800 rounded-xl flex-1 flex overflow-hidden relative shadow-lg">
+      <div className="bg-surface border border-border-main rounded-xl flex-1 flex overflow-hidden relative shadow-lg">
         {/* React Globe */}
         <div className="absolute inset-0 flex items-center justify-center">
           <Globe
@@ -89,24 +89,24 @@ const NetworkMapPage: React.FC = () => {
         {/* Overlay Overlay Cards */}
         <div className="absolute top-4 right-4 w-80 max-h-[90%] overflow-y-auto flex flex-col gap-3 z-10 pointer-events-auto custom-scrollbar">
           {globeData.length === 0 ? (
-            <div className="bg-surface/80 backdrop-blur-md p-6 rounded-lg border border-gray-800 text-center text-gray-400">
+            <div className="bg-surface/80 backdrop-blur-md p-6 rounded-lg border border-border-main text-center text-text-muted">
               NO ACTIVE EXTERNAL CONNECTIONS
             </div>
           ) : (
             globeData.map((conn, idx) => (
-              <div key={`${conn.port}-${idx}`} className={`bg-surface/90 backdrop-blur-md p-4 rounded-lg border ${conn.risk_score >= 7 ? 'border-danger/50' : 'border-gray-800'} transition-transform hover:-translate-y-1`}>
+              <div key={`${conn.port}-${idx}`} className={`bg-surface/90 backdrop-blur-md p-4 rounded-lg border ${conn.risk_score >= 7 ? 'border-danger/50' : 'border-border-main'} transition-transform hover:-translate-y-1`}>
                 <div className="flex justify-between items-center mb-2">
-                  <span className="font-mono text-sm font-bold text-gray-200">{conn.remote_ip}</span>
+                  <span className="font-mono text-sm font-bold text-text-main">{conn.remote_ip}</span>
                   <span>{conn.risk_score >= 10 ? '🚨' : conn.risk_score >= 5 ? '⚠️' : '✅'}</span>
                 </div>
-                <div className="text-xs text-gray-400 font-bold mb-3 truncate">
+                <div className="text-xs text-text-muted font-bold mb-3 truncate">
                   {conn.org}
                 </div>
                 <div className="flex justify-between text-xs font-bold">
                   <span className="text-primary">↓ {conn.kb_s_in.toFixed(1)} KB/s</span>
                   <span className="text-warning">↑ {conn.kb_s_out.toFixed(1)} KB/s</span>
                 </div>
-                <div className="text-[10px] text-gray-500 mt-2 pt-2 border-t border-gray-800">
+                <div className="text-[10px] text-text-dim mt-2 pt-2 border-t border-border-main">
                   PORT: {conn.port} • {conn.app_name.toUpperCase()}
                 </div>
               </div>

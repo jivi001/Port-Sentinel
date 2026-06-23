@@ -50,8 +50,8 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="page-container h-full w-full overflow-y-auto">
       <header className="page-header flex justify-between items-center mb-4">
-        <h1 className="page-title text-3xl font-bold text-white tracking-tight">Operational Dashboard</h1>
-        <div className={`connection-badge ${connected ? 'text-accent' : 'text-danger'} flex items-center gap-2 px-4 py-2 bg-surface rounded-full border border-gray-800`}>
+        <h1 className="page-title text-3xl font-bold text-text-main tracking-tight">Operational Dashboard</h1>
+        <div className={`connection-badge ${connected ? 'text-accent' : 'text-danger'} flex items-center gap-2 px-4 py-2 bg-surface rounded-full border border-border-main`}>
           <span className={`w-2 h-2 rounded-full ${connected ? 'bg-accent animate-pulse' : 'bg-danger'}`} />
           {connected ? 'REAL_TIME_LINK_ACTIVE' : 'OFFLINE'}
         </div>
@@ -68,18 +68,18 @@ const DashboardPage: React.FC = () => {
         width={1500}
       >
         {/* Primary KPI Metrics */}
-        <div key="kpi" className="bg-surface border border-gray-800 rounded-xl p-6 flex justify-between items-center shadow-lg cursor-move">
+        <div key="kpi" className="bg-surface border border-border-main rounded-xl p-6 flex justify-between items-center shadow-lg cursor-move">
           <div className="flex gap-16">
             <div className="flex flex-col">
-              <span className="text-xs uppercase font-bold text-gray-500 tracking-wider">TOTAL_THROUGHPUT</span>
-              <span className="text-2xl font-mono font-bold text-white mt-1">{formatRate(stats.totalIn + stats.totalOut)}</span>
+              <span className="text-xs uppercase font-bold text-text-muted tracking-wider">TOTAL_THROUGHPUT</span>
+              <span className="text-2xl font-mono font-bold text-text-main mt-1">{formatRate(stats.totalIn + stats.totalOut)}</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-xs uppercase font-bold text-gray-500 tracking-wider">ACTIVE_NODES</span>
-              <span className="text-2xl font-mono font-bold text-white mt-1">{portTable.length}</span>
+              <span className="text-xs uppercase font-bold text-text-muted tracking-wider">ACTIVE_NODES</span>
+              <span className="text-2xl font-mono font-bold text-text-main mt-1">{portTable.length}</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-xs uppercase font-bold text-gray-500 tracking-wider">SECURITY_STATE</span>
+              <span className="text-xs uppercase font-bold text-text-muted tracking-wider">SECURITY_STATE</span>
               <span className={`text-2xl font-mono font-bold mt-1 ${stats.highRiskCount > 0 ? 'text-danger' : 'text-accent'}`}>
                 {stats.highRiskCount > 0 ? 'RISK_DETECTED' : 'SECURE'}
               </span>
@@ -104,9 +104,9 @@ const DashboardPage: React.FC = () => {
         </div>
 
         {/* Main Port Table Section */}
-        <div key="table" className="bg-surface border border-gray-800 rounded-xl shadow-lg flex flex-col overflow-hidden">
-          <div className="p-4 bg-gray-900 border-b border-gray-800 flex justify-between items-center cursor-move">
-            <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Global Traffic Control</h2>
+        <div key="table" className="bg-surface border border-border-main rounded-xl shadow-lg flex flex-col overflow-hidden">
+          <div className="p-4 bg-secondary/50 border-b border-border-main flex justify-between items-center cursor-move">
+            <h2 className="text-xs font-bold text-text-muted uppercase tracking-widest">Global Traffic Control</h2>
             <ControlPanel filter={filter} onFilterChange={setFilter} />
           </div>
           <div className="flex-1 overflow-hidden flex flex-col">

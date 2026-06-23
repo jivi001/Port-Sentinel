@@ -5,6 +5,7 @@ import App from './App';
 import './assets/index.css';
 
 import ErrorBoundary from './components/ErrorBoundary';
+import { ThemeProvider } from './hooks/ThemeContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('Failed to find the root element');
@@ -12,9 +13,11 @@ if (!rootElement) throw new Error('Failed to find the root element');
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ThemeProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );
