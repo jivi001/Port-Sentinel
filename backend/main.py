@@ -486,7 +486,7 @@ async def lifespan(app: FastAPI):
     watchdog = spawn_watchdog()
 
     # --- Start Policy Engine ---
-    policy_engine.start()
+    # Policy engine is evaluated synchronously inside dispatcher_loop_async
 
     # --- Seed Admin User ---
     from sqlalchemy import select
