@@ -101,13 +101,19 @@ ALLOWED_ORIGINS = (
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from backend.core.auth import decode_access_token, create_access_token, verify_password, get_password_hash
 from backend.core.models import User, RoleEnum
-from backend.core.db import get_session
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
+def get_db_session():
+    session = db.get_session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_db_session)):
     credentials_exception = HTTPException(
         status_code=401,
         detail="Could not validate credentials",
@@ -528,7 +534,7 @@ app.add_middleware(
 # --- API Routes ---
 
 @app.post("/api/auth/login")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_db_session)):
     user = session.execute(select(User).where(User.username == form_data.username)).scalar_one_or_none()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
