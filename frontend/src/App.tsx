@@ -17,17 +17,25 @@ const NetworkMapPage = lazy(() => import('./pages/NetworkMapPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 const RouteFallback: React.FC = () => (
-  <div className="flex items-center justify-center min-h-[40vh] w-full">
-    <span className="text-gray-500 text-sm font-bold tracking-widest animate-pulse">LOADING_MODULE...</span>
+  <div
+    className="page-container"
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '40vh',
+    }}
+  >
+    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading…</span>
   </div>
 );
 
 const App: React.FC = () => {
   return (
     <SocketProvider>
-      <div className="flex h-screen w-screen bg-background overflow-hidden font-sans text-gray-100">
+      <div className="app-shell">
         <Sidebar />
-        <main className="flex-1 overflow-y-auto p-6 bg-background relative z-0">
+        <main className="main-content">
           <Suspense fallback={<RouteFallback />}>
             <Routes>
               <Route path="/" element={<DashboardPage />} />
@@ -36,9 +44,9 @@ const App: React.FC = () => {
               <Route path="/network" element={<NetworkMapPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                  <h1 className="text-6xl font-black text-danger mb-4">404</h1>
-                  <p className="font-bold tracking-widest uppercase">MODULE NOT FOUND</p>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>
+                  <h1 style={{ fontSize: '4rem', margin: 0, color: 'var(--accent-red)' }}>404</h1>
+                  <p>MODULE NOT FOUND</p>
                 </div>
               } />
             </Routes>
