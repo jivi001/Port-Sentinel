@@ -48,3 +48,10 @@ Thumbs.db
 # PyInstaller output (not needed in Docker)
 dist/
 *.spec.bak
+
+# Ruflo
+.claude/
+.claude-flow/
+.mcp.json
+CLAUDE.md
+CLAUDE.md.pre-ruflo

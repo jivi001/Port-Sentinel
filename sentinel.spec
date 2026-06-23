@@ -74,6 +74,8 @@ hiddenimports += [
     'backend.core.threat_intel',
     'backend.os_adapters',
     'backend.os_adapters.win32_bridge',
+    'backend.os_adapters.darwin_bridge',
+    'backend.os_adapters.android_bridge',
     'uvicorn.logging',
     'uvicorn.loops',
     'uvicorn.loops.auto',

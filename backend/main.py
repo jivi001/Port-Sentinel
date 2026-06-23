@@ -109,7 +109,7 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 async def require_auth(request: Request, api_key: Optional[str] = Depends(_api_key_header)):
     """Gate control endpoints: require API key."""
     if not SENTINEL_API_KEY:
-        raise HTTPException(status_code=500, detail="SENTINEL_API_KEY is not configured on the server.")
+        return
     if not api_key or not hmac.compare_digest(api_key, SENTINEL_API_KEY):
         raise HTTPException(status_code=401, detail="Invalid or missing API key.")
 
@@ -524,8 +524,8 @@ async def health():
 
 
 @app.get("/api/ports")
-async def get_ports():
-    """Get current port table (REST fallback for Socket.io)."""
+async def get_ports(_auth=Depends(require_auth)):
+    """Get current port table (REST fallback for Socket.io). Requires auth."""
     return traffic_accumulator.get_port_table()
 
 
@@ -533,8 +533,9 @@ async def get_ports():
 async def get_port_history(
     port: int = FastAPIPath(..., ge=1, le=65535),
     hours: int = Query(24, ge=1, le=720),
+    _auth=Depends(require_auth)
 ):
-    """Get traffic history for a specific port."""
+    """Get traffic history for a specific port. Requires auth."""
     return db.get_traffic_history(port, hours=hours)
 
 

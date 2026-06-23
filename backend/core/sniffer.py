@@ -90,6 +90,10 @@ class SnifferProcess(multiprocessing.Process):
         self._shm: Optional[shared_memory.SharedMemory] = None
         # Local accumulation buffer: port -> (bytes_in, bytes_out, pid, proto)
         self._accum: Dict[int, list] = {}
+        
+        # Performance: Cache PID map to avoid calling psutil.net_connections 10 times per second
+        self._cached_pid_map: Dict[int, int] = {}
+        self._last_pid_map_update: float = 0.0
 
     def _init_shared_memory(self) -> shared_memory.SharedMemory:
         """Create or attach to the shared memory segment."""
@@ -188,8 +192,13 @@ class SnifferProcess(multiprocessing.Process):
         if self._shm is None:
             return
 
-        pid_map = self._build_pid_map()
         now = time.time()
+        # Update PID map at most once every 2 seconds
+        if now - self._last_pid_map_update > 2.0:
+            self._cached_pid_map = self._build_pid_map()
+            self._last_pid_map_update = now
+            
+        pid_map = self._cached_pid_map
 
         with self.lock:
             for port, data in self._accum.items():

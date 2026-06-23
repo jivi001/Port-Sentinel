@@ -45,3 +45,8 @@ Thumbs.db
 # --- PyInstaller ---
 *.spec.bak
 sentinel_pf_rules.conf
+
+# --- Ruflo ---
+.claude/
+.claude-flow/
+.mcp.json
