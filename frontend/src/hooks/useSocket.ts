@@ -111,9 +111,9 @@ export function useSocket(): UseSocketReturn {
         const decoded = decode(raw instanceof Uint8Array ? raw : new Uint8Array(raw));
         const validated = PortTableSchema.parse(decoded) as PortTable;
         processPortTable(validated);
-      } catch (e) {
+      } catch (e: any) {
         if (e instanceof z.ZodError) {
-          console.error('Socket.io payload validation failed:', e.errors);
+          console.error('Socket.io payload validation failed:', e.issues);
         } else {
           console.error('MsgPack decode error:', e);
         }

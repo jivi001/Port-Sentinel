@@ -1,314 +1,295 @@
 """
-Sentinel Database Layer — SQLite + InfluxDB + Supabase.
+Sentinel Database Layer — SQLAlchemy ORM + InfluxDB + Supabase.
 
-SQLite:  Local config cache, process-name map, 24h traffic history
+SQLAlchemy: Local config cache, process-name map, 24h traffic history, approvals
 InfluxDB: Time-series traffic ingestion for historical "Top Usage" queries
 Supabase: User accounts + blocked-port-list sync across devices
 """
 
 import os
 import time
-import sqlite3
 import logging
-import asyncio
 import threading
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
+from sqlalchemy import create_engine, func, event
+from sqlalchemy.orm import sessionmaker, Session
+
+from backend.core.models import (
+    Base, TrafficHistory, ProcessMap, ConfigCache, BlockedPort, 
+    AuditLog, AnalystApproval, ApprovalStatus, ActionType
+)
+
 logger = logging.getLogger("sentinel.db")
 
-# --- SQLite ---
+# --- SQLAlchemy ---
 
 DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "sentinel.db"
 
-SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS traffic_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp REAL NOT NULL,
-    port INTEGER NOT NULL,
-    pid INTEGER NOT NULL,
-    app_name TEXT NOT NULL DEFAULT 'Unknown',
-    kb_s_in REAL NOT NULL DEFAULT 0.0,
-    kb_s_out REAL NOT NULL DEFAULT 0.0,
-    protocol TEXT NOT NULL DEFAULT 'TCP',
-    direction TEXT NOT NULL DEFAULT 'both',
-    risk_score INTEGER DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_traffic_timestamp ON traffic_history(timestamp);
-CREATE INDEX IF NOT EXISTS idx_traffic_port ON traffic_history(port);
-
-CREATE TABLE IF NOT EXISTS process_map (
-    pid INTEGER PRIMARY KEY,
-    app_name TEXT NOT NULL,
-    first_seen REAL NOT NULL,
-    last_seen REAL NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS config_cache (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    updated_at REAL NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS blocked_ports (
-    port INTEGER PRIMARY KEY,
-    block_type TEXT NOT NULL DEFAULT 'hard',
-    blocked_at REAL NOT NULL,
-    reason TEXT DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp REAL NOT NULL,
-    event_type TEXT NOT NULL, -- 'policy_trigger', 'manual_block', 'process_kill'
-    app_name TEXT,
-    port INTEGER,
-    pid INTEGER,
-    severity TEXT NOT NULL DEFAULT 'info', -- 'info', 'warning', 'critical'
-    message TEXT NOT NULL,
-    details TEXT -- JSON or string
-);
-
-CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
-CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_logs(event_type);
-"""
-
-
 class SQLiteDB:
-    """Local SQLite database for config, process map, and traffic history."""
+    """Local SQLite database utilizing SQLAlchemy ORM."""
 
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = str(db_path or DEFAULT_DB_PATH)
-        # Ensure data directory exists
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
-        self._conn: Optional[sqlite3.Connection] = None
+        self.engine = None
+        self.SessionLocal = None
         self._write_lock = threading.Lock()
 
     def connect(self) -> None:
-        """Initialize the database connection and schema."""
-        self._conn = sqlite3.connect(
-            self.db_path,
-            check_same_thread=False,
-            timeout=10.0,
+        """Initialize the SQLAlchemy engine and session factory."""
+        db_url = f"sqlite:///{self.db_path}"
+        self.engine = create_engine(
+            db_url,
+            connect_args={"check_same_thread": False, "timeout": 10.0},
         )
-        self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL;")
-        self._conn.execute("PRAGMA synchronous=NORMAL;")
-        self._conn.execute("PRAGMA foreign_keys=ON;")
-        self._conn.execute("PRAGMA busy_timeout=5000;")
-        self._conn.executescript(SCHEMA_SQL)
-        self._conn.commit()
         
-        # --- Safe Migration ---
-        # Ensure risk_score column exists if the table was created by an older version
-        try:
-            self._conn.execute("ALTER TABLE traffic_history ADD COLUMN risk_score INTEGER DEFAULT 0;")
-            self._conn.commit()
-            logger.info("Migrated database: added risk_score column")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name" not in str(e).lower():
-                logger.warning(f"Migration notice: {e}")
-        
-        logger.info(f"SQLite connected: {self.db_path}")
+        # PRAGMA commands for SQLite performance
+        @event.listens_for(self.engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.close()
+
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+        logger.info(f"SQLAlchemy connected: {db_url}")
 
     def close(self) -> None:
-        """Close the database connection."""
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        """Dispose the database engine."""
+        if self.engine:
+            self.engine.dispose()
+            self.engine = None
 
-    @property
-    def conn(self) -> sqlite3.Connection:
-        if self._conn is None:
+    def get_session(self) -> Session:
+        if self.SessionLocal is None:
             self.connect()
-        return self._conn
+        return self.SessionLocal()
 
     # --- Traffic History ---
 
     def insert_traffic(self, records: List[Dict[str, Any]]) -> None:
-        """Batch insert traffic records."""
         if not records:
             return
 
-        normalized_records = []
-        for record in records:
-            normalized_records.append(
-                {
-                    "timestamp": float(record.get("timestamp", time.time())),
-                    "port": int(record.get("port", 0)),
-                    "pid": int(record.get("pid", 0)),
-                    "app_name": str(record.get("app_name", "Unknown")),
-                    "kb_s_in": float(record.get("kb_s_in", 0.0)),
-                    "kb_s_out": float(record.get("kb_s_out", 0.0)),
-                    "protocol": str(record.get("protocol", "TCP")),
-                    "direction": str(record.get("direction", "both")),
-                    "risk_score": int(record.get("risk_score", 0)),
-                }
-            )
+        traffic_objs = [
+            TrafficHistory(
+                timestamp=float(r.get("timestamp", time.time())),
+                port=int(r.get("port", 0)),
+                pid=int(r.get("pid", 0)),
+                app_name=str(r.get("app_name", "Unknown")),
+                kb_s_in=float(r.get("kb_s_in", 0.0)),
+                kb_s_out=float(r.get("kb_s_out", 0.0)),
+                protocol=str(r.get("protocol", "TCP")),
+                direction=str(r.get("direction", "both")),
+                risk_score=int(r.get("risk_score", 0)),
+            ) for r in records
+        ]
 
         with self._write_lock:
-            self.conn.executemany(
-                """INSERT INTO traffic_history
-                   (timestamp, port, pid, app_name, kb_s_in, kb_s_out, protocol, direction, risk_score)
-                   VALUES (:timestamp, :port, :pid, :app_name, :kb_s_in, :kb_s_out, :protocol, :direction, :risk_score)""",
-                normalized_records,
-            )
-            self.conn.commit()
+            with self.get_session() as session:
+                session.bulk_save_objects(traffic_objs)
+                session.commit()
 
     def get_traffic_history(self, port: int, hours: int = 24) -> List[dict]:
-        """Get traffic history for a port within the last N hours."""
         cutoff = time.time() - (hours * 3600)
-        with self._write_lock:
-            cursor = self.conn.execute(
-                "SELECT * FROM traffic_history WHERE port = ? AND timestamp >= ? ORDER BY timestamp",
-                (port, cutoff),
-            )
-            return [dict(row) for row in cursor.fetchall()]
+        with self.get_session() as session:
+            records = session.query(TrafficHistory).filter(
+                TrafficHistory.port == port,
+                TrafficHistory.timestamp >= cutoff
+            ).order_by(TrafficHistory.timestamp).all()
+            return [
+                {
+                    "id": r.id, "timestamp": r.timestamp, "port": r.port, "pid": r.pid,
+                    "app_name": r.app_name, "kb_s_in": r.kb_s_in, "kb_s_out": r.kb_s_out,
+                    "protocol": r.protocol, "direction": r.direction, "risk_score": r.risk_score
+                } for r in records
+            ]
 
     def prune_old_traffic(self, max_age_hours: int = 24) -> int:
-        """Delete traffic records older than max_age_hours."""
         cutoff = time.time() - (max_age_hours * 3600)
         with self._write_lock:
-            cursor = self.conn.execute(
-                "DELETE FROM traffic_history WHERE timestamp < ?", (cutoff,)
-            )
-            self.conn.commit()
-            return cursor.rowcount
+            with self.get_session() as session:
+                deleted_count = session.query(TrafficHistory).filter(TrafficHistory.timestamp < cutoff).delete()
+                session.commit()
+                return deleted_count
 
     # --- Process Map ---
 
     def upsert_process(self, pid: int, app_name: str) -> None:
-        """Insert or update process map entry."""
         now = time.time()
         with self._write_lock:
-            self.conn.execute(
-                """INSERT INTO process_map (pid, app_name, first_seen, last_seen)
-                   VALUES (?, ?, ?, ?)
-                   ON CONFLICT(pid) DO UPDATE SET app_name=?, last_seen=?""",
-                (pid, app_name, now, now, app_name, now),
-            )
-            self.conn.commit()
+            with self.get_session() as session:
+                proc = session.query(ProcessMap).filter(ProcessMap.pid == pid).first()
+                if proc:
+                    proc.app_name = app_name
+                    proc.last_seen = now
+                else:
+                    proc = ProcessMap(pid=pid, app_name=app_name, first_seen=now, last_seen=now)
+                    session.add(proc)
+                session.commit()
 
     def get_process_name(self, pid: int) -> Optional[str]:
-        """Look up app name by PID."""
-        with self._write_lock:
-            cursor = self.conn.execute(
-                "SELECT app_name FROM process_map WHERE pid = ?", (pid,)
-            )
-            row = cursor.fetchone()
-            return row["app_name"] if row else None
+        with self.get_session() as session:
+            proc = session.query(ProcessMap).filter(ProcessMap.pid == pid).first()
+            return proc.app_name if proc else None
 
     # --- Config Cache ---
 
     def set_config(self, key: str, value: str) -> None:
-        """Set a config value."""
         with self._write_lock:
-            self.conn.execute(
-                """INSERT INTO config_cache (key, value, updated_at)
-                   VALUES (?, ?, ?)
-                   ON CONFLICT(key) DO UPDATE SET value=?, updated_at=?""",
-                (key, value, time.time(), value, time.time()),
-            )
-            self.conn.commit()
+            with self.get_session() as session:
+                conf = session.query(ConfigCache).filter(ConfigCache.key == key).first()
+                if conf:
+                    conf.value = value
+                    conf.updated_at = time.time()
+                else:
+                    conf = ConfigCache(key=key, value=value, updated_at=time.time())
+                    session.add(conf)
+                session.commit()
 
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        """Get a config value."""
-        with self._write_lock:
-            cursor = self.conn.execute(
-                "SELECT value FROM config_cache WHERE key = ?", (key,)
-            )
-            row = cursor.fetchone()
-            return row["value"] if row else default
+        with self.get_session() as session:
+            conf = session.query(ConfigCache).filter(ConfigCache.key == key).first()
+            return conf.value if conf else default
 
     # --- Blocked Ports ---
 
     def add_blocked_port(self, port: int, block_type: str = "hard", reason: str = "") -> None:
-        """Record a blocked port."""
         with self._write_lock:
-            self.conn.execute(
-                """INSERT OR REPLACE INTO blocked_ports (port, block_type, blocked_at, reason)
-                   VALUES (?, ?, ?, ?)""",
-                (port, block_type, time.time(), reason),
-            )
-            self.conn.commit()
+            with self.get_session() as session:
+                bp = session.query(BlockedPort).filter(BlockedPort.port == port).first()
+                if bp:
+                    bp.block_type = block_type
+                    bp.blocked_at = time.time()
+                    bp.reason = reason
+                else:
+                    bp = BlockedPort(port=port, block_type=block_type, blocked_at=time.time(), reason=reason)
+                    session.add(bp)
+                session.commit()
 
     def remove_blocked_port(self, port: int) -> None:
-        """Remove a blocked port record."""
         with self._write_lock:
-            self.conn.execute("DELETE FROM blocked_ports WHERE port = ?", (port,))
-            self.conn.commit()
+            with self.get_session() as session:
+                session.query(BlockedPort).filter(BlockedPort.port == port).delete()
+                session.commit()
 
     def get_blocked_ports(self) -> List[dict]:
-        """Get all currently blocked ports."""
-        with self._write_lock:
-            cursor = self.conn.execute("SELECT * FROM blocked_ports ORDER BY port")
-            return [dict(row) for row in cursor.fetchall()]
+        with self.get_session() as session:
+            records = session.query(BlockedPort).order_by(BlockedPort.port).all()
+            return [
+                {
+                    "port": r.port, "block_type": r.block_type,
+                    "blocked_at": r.blocked_at, "reason": r.reason
+                } for r in records
+            ]
 
     def clear_blocked_ports(self) -> int:
-        """Remove all blocked port records."""
         with self._write_lock:
-            cursor = self.conn.execute("DELETE FROM blocked_ports")
-            self.conn.commit()
-            return cursor.rowcount
+            with self.get_session() as session:
+                deleted_count = session.query(BlockedPort).delete()
+                session.commit()
+                return deleted_count
 
     # --- Audit Logs ---
 
     def insert_audit_log(self, event_type: str, message: str, app_name: Optional[str] = None, 
                          port: Optional[int] = None, pid: Optional[int] = None, 
                          severity: str = "info", details: Optional[str] = None) -> None:
-        """Record a system or security event."""
         with self._write_lock:
-            self.conn.execute(
-                """INSERT INTO audit_logs 
-                   (timestamp, event_type, app_name, port, pid, severity, message, details)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (time.time(), event_type, app_name, port, pid, severity, message, details),
-            )
-            self.conn.commit()
+            with self.get_session() as session:
+                log = AuditLog(
+                    timestamp=time.time(), event_type=event_type,
+                    app_name=app_name, port=port, pid=pid,
+                    severity=severity, message=message, details=details
+                )
+                session.add(log)
+                session.commit()
 
     def get_audit_logs(self, limit: int = 100) -> List[dict]:
-        """Get recent audit logs."""
+        with self.get_session() as session:
+            records = session.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit).all()
+            return [
+                {
+                    "id": r.id, "timestamp": r.timestamp, "event_type": r.event_type,
+                    "app_name": r.app_name, "port": r.port, "pid": r.pid,
+                    "severity": r.severity, "message": r.message, "details": r.details
+                } for r in records
+            ]
+
+    # --- Analyst Approvals ---
+
+    def create_analyst_approval(self, action_type: str, target_identifier: str, reason: str, risk_score: int = 0) -> int:
+        """Create a new approval request."""
         with self._write_lock:
-            cursor = self.conn.execute(
-                "SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT ?", (limit,)
-            )
-            return [dict(row) for row in cursor.fetchall()]
+            with self.get_session() as session:
+                approval = AnalystApproval(
+                    action_type=action_type,
+                    target_identifier=target_identifier,
+                    reason=reason,
+                    risk_score=risk_score
+                )
+                session.add(approval)
+                session.commit()
+                return approval.id
+
+    def update_approval_status(self, approval_id: int, status: str, resolved_by: str) -> bool:
+        """Update the status of an approval request."""
+        with self._write_lock:
+            with self.get_session() as session:
+                approval = session.query(AnalystApproval).filter(AnalystApproval.id == approval_id).first()
+                if not approval:
+                    return False
+                approval.status = status
+                approval.resolved_by = resolved_by
+                approval.resolved_at = time.time()
+                session.commit()
+                return True
+
+    def get_pending_approvals(self) -> List[dict]:
+        """Get all pending analyst approvals."""
+        with self.get_session() as session:
+            records = session.query(AnalystApproval).filter(AnalystApproval.status == ApprovalStatus.PENDING.value).order_by(AnalystApproval.risk_score.desc()).all()
+            return [
+                {
+                    "id": r.id, "created_at": r.created_at, "action_type": r.action_type,
+                    "target_identifier": r.target_identifier, "reason": r.reason,
+                    "status": r.status, "risk_score": r.risk_score
+                } for r in records
+            ]
 
     # --- Analytics & Forensics ---
 
     def get_top_talkers(self, hours: int = 24, limit: int = 10) -> List[dict]:
-        """
-        Identify applications with the highest cumulative traffic.
-        Returns total bytes transferred (KB) per application.
-        """
         cutoff = time.time() - (hours * 3600)
-        with self._write_lock:
-            cursor = self.conn.execute(
-                """SELECT app_name, SUM(kb_s_in + kb_s_out) as total_kb, 
-                          MAX(risk_score) as max_risk
-                   FROM traffic_history 
-                   WHERE timestamp >= ? 
-                   GROUP BY app_name 
-                   ORDER BY total_kb DESC 
-                   LIMIT ?""",
-                (cutoff, limit),
-            )
-            return [dict(row) for row in cursor.fetchall()]
+        with self.get_session() as session:
+            records = session.query(
+                TrafficHistory.app_name,
+                func.sum(TrafficHistory.kb_s_in + TrafficHistory.kb_s_out).label("total_kb"),
+                func.max(TrafficHistory.risk_score).label("max_risk")
+            ).filter(TrafficHistory.timestamp >= cutoff).group_by(TrafficHistory.app_name).order_by(
+                func.sum(TrafficHistory.kb_s_in + TrafficHistory.kb_s_out).desc()
+            ).limit(limit).all()
+            
+            return [
+                {"app_name": r.app_name, "total_kb": r.total_kb, "max_risk": r.max_risk}
+                for r in records
+            ]
 
     def get_global_traffic_stats(self, hours: int = 24) -> dict:
-        """Get aggregated traffic volume across the whole system."""
         cutoff = time.time() - (hours * 3600)
-        with self._write_lock:
-            cursor = self.conn.execute(
-                """SELECT SUM(kb_s_in) as total_in_kb, SUM(kb_s_out) as total_out_kb
-                   FROM traffic_history WHERE timestamp >= ?""",
-                (cutoff,),
-            )
-            row = cursor.fetchone()
+        with self.get_session() as session:
+            stats = session.query(
+                func.sum(TrafficHistory.kb_s_in).label("total_in_kb"),
+                func.sum(TrafficHistory.kb_s_out).label("total_out_kb")
+            ).filter(TrafficHistory.timestamp >= cutoff).first()
+
             return {
-                "total_in_mb": round((row["total_in_kb"] or 0) / 1024, 2),
-                "total_out_mb": round((row["total_out_kb"] or 0) / 1024, 2),
+                "total_in_mb": round((stats.total_in_kb or 0) / 1024, 2),
+                "total_out_mb": round((stats.total_out_kb or 0) / 1024, 2),
             }
 
 
@@ -337,7 +318,6 @@ class InfluxDBWriter:
         self._write_api = None
 
     def connect(self) -> bool:
-        """Initialize InfluxDB client. Returns True if connected."""
         if not self.token:
             logger.warning("InfluxDB token not configured; time-series writes disabled")
             return False
@@ -354,7 +334,6 @@ class InfluxDBWriter:
             return False
 
     def write_traffic(self, records: List[Dict[str, Any]]) -> None:
-        """Write traffic data points to InfluxDB."""
         if self._write_api is None:
             return
         try:
@@ -380,7 +359,6 @@ class InfluxDBWriter:
             logger.debug(f"InfluxDB write error: {e}")
 
     def close(self) -> None:
-        """Close the InfluxDB client."""
         if self._client:
             self._client.close()
             self._client = None
@@ -406,7 +384,6 @@ class SupabaseSync:
         self._client = None
 
     def connect(self) -> bool:
-        """Initialize Supabase client. Returns True if connected."""
         if not self.url or not self.key:
             logger.warning("Supabase not configured; cloud sync disabled")
             return False
@@ -421,7 +398,6 @@ class SupabaseSync:
             return False
 
     def sign_in(self, email: str, password: str) -> Optional[dict]:
-        """Sign in a user."""
         if not self._client:
             return None
         try:
@@ -434,7 +410,6 @@ class SupabaseSync:
             return None
 
     def sign_up(self, email: str, password: str) -> Optional[dict]:
-        """Register a new user."""
         if not self._client:
             return None
         try:
@@ -447,11 +422,9 @@ class SupabaseSync:
             return None
 
     def sync_blocked_ports(self, user_id: str, blocked_ports: List[dict]) -> bool:
-        """Upload blocked port list to Supabase for cross-device sync."""
         if not self._client:
             return False
         try:
-            # Upsert blocked ports for this user
             for bp in blocked_ports:
                 self._client.table("blocked_ports").upsert({
                     "user_id": user_id,
@@ -466,7 +439,6 @@ class SupabaseSync:
             return False
 
     def fetch_blocked_ports(self, user_id: str) -> List[dict]:
-        """Fetch blocked port list from Supabase."""
         if not self._client:
             return []
         try:
@@ -482,5 +454,4 @@ class SupabaseSync:
             return []
 
     def close(self) -> None:
-        """Close Supabase client."""
         self._client = None

@@ -17,14 +17,14 @@ export const apiService = {
    * Internal fetch wrapper with fallback logic.
    */
   _call: async (path: string, options: RequestInit = {}) => {
-    const apiKey = localStorage.getItem('SENTINEL_API_KEY') || import.meta.env.VITE_SENTINEL_API_KEY || '';
+    const token = localStorage.getItem('sentinel_token');
     const headers: Record<string, string> = { 
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>)
     };
     
-    if (apiKey) {
-      headers['X-API-Key'] = apiKey;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     const requestInit: RequestInit = {
@@ -78,11 +78,6 @@ export const apiService = {
   getTopTalkers: async (hours: number = 24, limit: number = 10): Promise<any[]> => 
     apiService._call(`/analytics/top-talkers?hours=${hours}&limit=${limit}`),
 
-  killProcess: async (pid: number): Promise<boolean> => {
-    const res = await apiService._call(`/control/kill/${pid}`, { method: 'POST' });
-    return !!res.success;
-  },
-
   blockPort: async (port: number, protocol: string = 'TCP'): Promise<boolean> => {
     const res = await apiService._call(`/control/block/${port}?protocol=${protocol}`, { method: 'POST' });
     return !!res.success;
@@ -93,13 +88,19 @@ export const apiService = {
     return !!res.success;
   },
 
-  suspendProcess: async (pid: number): Promise<boolean> => {
-    const res = await apiService._call(`/control/suspend/${pid}`, { method: 'POST' });
-    return !!res.success;
+  requestApproval: async (pid: number, appName?: string, reason: string = 'Manual request'): Promise<any> => {
+    let url = `/approvals/request?pid=${pid}&reason=${encodeURIComponent(reason)}`;
+    if (appName) url += `&app_name=${encodeURIComponent(appName)}`;
+    return apiService._call(url, { method: 'POST' });
   },
 
-  resumeProcess: async (pid: number): Promise<boolean> => {
-    const res = await apiService._call(`/control/resume/${pid}`, { method: 'POST' });
+  getApprovals: async (): Promise<any[]> => apiService._call(`/approvals`),
+
+  resolveApproval: async (approvalId: number, status: 'approved' | 'rejected'): Promise<boolean> => {
+    const res = await apiService._call(`/approvals/${approvalId}/resolve`, { 
+      method: 'POST',
+      body: JSON.stringify({ status })
+    });
     return !!res.success;
   },
 };

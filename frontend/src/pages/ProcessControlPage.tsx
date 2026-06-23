@@ -9,7 +9,7 @@ import ConfirmModal from '../components/ConfirmModal';
 
 const ProcessControlPage: React.FC = () => {
   const { portTable } = useSocketContext();
-  const [killPid, setKillPid] = useState<number | null>(null);
+  const [targetPid, setTargetPid] = useState<{ pid: number, appName: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; color: string } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
@@ -49,77 +49,77 @@ const ProcessControlPage: React.FC = () => {
     return Array.from(map.values()).sort((a, b) => (b.kb_s_in + b.kb_s_out) - (a.kb_s_in + a.kb_s_out));
   }, [portTable]);
 
-  const handleKill = async () => {
-    if (!killPid) return;
-    const targetPid = killPid;
+  const handleRequestApproval = async () => {
+    if (!targetPid) return;
     try {
-      const success = await apiService.killProcess(targetPid);
-      if (!success) {
-        showToast(`TERMINATE FAILED FOR PID ${targetPid}`, 'var(--accent-red)');
-      } else {
-        showToast(`PID ${targetPid} TERMINATED`, 'var(--accent-green)');
-      }
+      await apiService.requestApproval(targetPid.pid, targetPid.appName, `User requested suspension for PID ${targetPid.pid}`);
+      showToast(`APPROVAL REQUESTED FOR PID ${targetPid.pid}`, 'var(--accent-blue)');
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Terminate request failed';
+      const message = e instanceof Error ? e.message : 'Request failed';
       showToast(message.toUpperCase(), 'var(--accent-red)');
     }
-    setKillPid(null);
+    setTargetPid(null);
   };
 
   return (
-    <div className="page-container">
-      <header className="page-header">
-        <h1 className="page-title">Process Management</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div className="page-container h-full w-full flex flex-col">
+      <header className="page-header flex justify-between items-center mb-4 shrink-0">
+        <h1 className="page-title text-3xl font-bold text-white tracking-tight">Process Management</h1>
+        <div className="flex items-center gap-3">
           {toast && (
-            <div className="connection-badge" style={{ color: toast.color }}>
+            <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-gray-800 font-bold" style={{ color: toast.color }}>
               {toast.message}
             </div>
           )}
-          <div className="connection-badge">
+          <div className="connection-badge flex items-center px-4 py-2 bg-surface rounded-full border border-gray-800 text-primary font-bold">
             {processes.length} ACTIVE_PROCESSES
           </div>
         </div>
       </header>
 
-      <section className="sentinel-section" style={{ flex: 1 }}>
-        <div className="sentinel-section__header">
-          <h2 className="sentinel-section__title">Network-Active Processes</h2>
+      <div className="bg-surface border border-gray-800 rounded-xl shadow-lg flex flex-col overflow-hidden flex-1 min-h-0">
+        <div className="p-4 bg-gray-900 border-b border-gray-800 flex justify-between items-center">
+          <h2 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Network-Active Processes</h2>
         </div>
         
-        <div className="data-table-container">
-          <div className="data-table-header">
-            <div className="col-sm">PID</div>
-            <div className="col-lg">APPLICATION_NAME</div>
-            <div className="col-md">ACTIVE_PORTS</div>
-            <div className="col-md col-right">INBOUND</div>
-            <div className="col-md col-right">OUTBOUND</div>
-            <div className="col-md col-right">ACTION</div>
+        <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex items-center p-4 bg-secondary border-b border-gray-800 text-xs font-bold text-gray-500 uppercase tracking-widest gap-4">
+            <div className="w-20">PID</div>
+            <div className="flex-[1.5] min-w-0">APPLICATION_NAME</div>
+            <div className="w-36">ACTIVE_PORTS</div>
+            <div className="w-36 text-right">INBOUND</div>
+            <div className="w-36 text-right">OUTBOUND</div>
+            <div className="w-36 text-right">ACTION</div>
           </div>
           
-          <div className="data-table-body">
+          <div className="flex-1 overflow-y-auto">
             {processes.map((proc) => (
-              <div key={proc.pid} className="data-row">
-                <div className="col-sm mono text-muted">{proc.pid}</div>
-                <div className="col-lg" style={{ fontWeight: 700, color: 'white' }}>{proc.app_name}</div>
-                <div className="col-md mono text-blue">{Array.from(proc.ports).join(', ')}</div>
-                <div className="col-md col-right mono text-blue">{proc.kb_s_in.toFixed(1)} KB/s</div>
-                <div className="col-md col-right mono text-orange">{proc.kb_s_out.toFixed(1)} KB/s</div>
-                <div className="col-md col-right">
-                  <button className="btn" style={{ color: 'var(--accent-red)' }} onClick={() => setKillPid(proc.pid)}>TERMINATE</button>
+              <div key={proc.pid} className="flex items-center p-4 border-b border-gray-800 hover:bg-gray-800/50 transition-colors gap-4">
+                <div className="w-20 font-mono text-gray-400 font-semibold">{proc.pid}</div>
+                <div className="flex-[1.5] min-w-0 font-bold text-white truncate">{proc.app_name}</div>
+                <div className="w-36 font-mono text-primary font-semibold truncate">{Array.from(proc.ports).join(', ')}</div>
+                <div className="w-36 text-right font-mono text-primary font-semibold">{proc.kb_s_in.toFixed(1)} KB/s</div>
+                <div className="w-36 text-right font-mono text-warning font-semibold">{proc.kb_s_out.toFixed(1)} KB/s</div>
+                <div className="w-36 text-right">
+                  <button 
+                    className="px-4 py-2 rounded-md font-bold text-xs bg-transparent text-danger hover:bg-danger/10 hover:text-white transition-colors border border-transparent hover:border-danger/30"
+                    onClick={() => setTargetPid({ pid: proc.pid, appName: proc.app_name })}
+                  >
+                    SUSPEND
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         </div>
-      </section>
+      </div>
 
       <ConfirmModal 
-        open={!!killPid} 
-        title="Terminate Process?"
-        message={`Warning: Killing PID ${killPid} will immediately stop its network activity and may cause data loss.`}
-        onConfirm={handleKill}
-        onCancel={() => setKillPid(null)}
+        open={!!targetPid} 
+        title="Request Process Suspension?"
+        message={`Warning: Suspending PID ${targetPid?.pid} requires Analyst approval. It will not be suspended immediately.`}
+        onConfirm={handleRequestApproval}
+        onCancel={() => setTargetPid(null)}
       />
     </div>
   );

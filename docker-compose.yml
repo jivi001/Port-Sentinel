@@ -1,26 +1,25 @@
+version: '3.8'
+
 services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile.backend
+      dockerfile: backend/Dockerfile
     ports:
       - "127.0.0.1:8600:8600"
     environment:
       HOST: 0.0.0.0
       PORT: 8600
-      # ⚠️  SECURITY: Set a strong API key before deploying. Generate one with:
-      #   python -c "import secrets; print(secrets.token_urlsafe(32))"
-      SENTINEL_API_KEY: "CHANGE_ME_BEFORE_DEPLOY"
-      #
-      # Allow the nginx frontend origin for CORS:
-      SENTINEL_CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8600,http://127.0.0.1:8600"
-      #
-      # Optional cloud integrations:
-      # INFLUXDB_TOKEN: your_token_here
-      # SUPABASE_URL: your_supabase_url
-      # SUPABASE_KEY: your_supabase_key
+      SENTINEL_JWT_SECRET: "CHANGE_ME_BEFORE_DEPLOY_SUPER_SECRET"
+      SENTINEL_CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8600,http://127.0.0.1:8600,http://frontend:80"
+      SQLITE_DB_PATH: data/sentinel.db
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: your_token_here
+      INFLUXDB_ORG: sentinel
+      INFLUXDB_BUCKET: traffic
     volumes:
-      - sentinel-data:/app/backend/data
+      - sentinel-data:/app/data
+      - sentinel-logs:/app/logs
     cap_drop:
       - ALL
     cap_add:
@@ -39,19 +38,37 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
+      dockerfile: frontend/Dockerfile
     ports:
-      - "8080:8080"
+      - "8080:80"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - sentinel-network
+
+  influxdb:
+    image: influxdb:2.7
+    container_name: sentinel-influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword123
+      - DOCKER_INFLUXDB_INIT_ORG=sentinel
+      - DOCKER_INFLUXDB_INIT_BUCKET=traffic
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=your_token_here
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    restart: unless-stopped
     networks:
       - sentinel-network
 
@@ -61,4 +78,8 @@ networks:
 
 volumes:
   sentinel-data:
+    driver: local
+  sentinel-logs:
+    driver: local
+  influxdb-data:
     driver: local

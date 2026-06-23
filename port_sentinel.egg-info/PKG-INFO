@@ -256,7 +256,8 @@ docker compose up --build
 
 | Variable | Purpose | Required | Example |
 | -------- | ------- | -------- | ------- |
-| `HOST` | IP address to bind the API server | No | `0.0.0.0` |
+| `SENTINEL_API_KEY`| Token required for authenticating all control API calls | **Yes** | `your_secure_token` |
+| `HOST` | IP address to bind the API server | No | `127.0.0.1` |
 | `PORT` | Port for the API server | No | `8600` |
 | `IPINFO_TOKEN` | Token for IP geolocation & threat scoring | No | `your_token` |
 | `INFLUXDB_URL` | URL to InfluxDB for time-series export | No | `http://localhost:8086` |
@@ -304,10 +305,12 @@ Connect a Socket.IO client to `/ws`. The server emits a `port_table` event conta
 
 ## 11. Security
 
+- **Authentication & API Keys:** All destructive control paths (Kill, Block, Suspend) are fully protected by `SENTINEL_API_KEY` authentication using the `X-API-Key` header.
+- **IPC Integrity:** Shared Memory entries are strongly signed using HMAC (SHA-256) to prevent tampering by unauthorized local processes.
 - **System PID Protection:** The backend OS adapters actively refuse to kill or suspend critical processes (e.g., PID `0` or `4` on Windows, `0` or `1` on macOS) throwing a `SystemProcessProtectionError`.
-- **Namespaced OS Rules:** All firewall rules created by the system are prefixed with `Sentinel_`. On graceful shutdown (via `atexit` hooks), the system automatically cleans up its own rules to ensure no ports are permanently blocked by accident.
+- **Namespaced OS Rules:** All firewall rules created by the system are prefixed with `Sentinel_`. On graceful shutdown (via `atexit` hooks), the system automatically cleans up its own rules (or scoped anchor rules like `com.sentinel` on macOS) to ensure no ports are permanently blocked by accident.
 - **Audit Logging:** Every destructive action (kill/block) is recorded locally in SQLite with a timestamp, target, and reason (User action vs. Policy trigger).
-- **Execution Context:** The application requires elevated privileges (`sudo` / Admin). By default, it binds to `0.0.0.0` but should only be exposed locally (`127.0.0.1`) or via a secure VPN/Tunnel in a production setting.
+- **Execution Context:** The application requires elevated privileges (`sudo` / Admin). By default, it binds to `127.0.0.1` and will refuse to expose control plane APIs to `0.0.0.0` without a strong API key configured.
 
 ---
 
@@ -362,7 +365,6 @@ pytest -v
 - [ ] **Linux `iptables`/`ufw` Support:** Add full `linux_bridge.py` support for blocking ports natively on Ubuntu/Debian servers.
 - [ ] **Custom Policy Builder:** Implement a UI for operators to drag-and-drop policy rules (e.g., "If Outbound KB/s > 5000 AND Risk > 80 -> Block Port").
 - [ ] **eBPF Sniffer:** Replace Scapy with an eBPF-based sniffer for kernel-level packet capture, further reducing CPU overhead.
-- [ ] **Authentication:** Add JWT-based login for exposing the dashboard over networks safely.
 
 ---
 

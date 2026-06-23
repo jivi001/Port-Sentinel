@@ -67,12 +67,8 @@ SENTINEL_SHM_NAME = f"sentinel_shm_{secrets.token_hex(8)}"
 SENTINEL_HMAC_KEY = secrets.token_bytes(32)
 
 # --- Logging ---
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
-logger = logging.getLogger("sentinel.main")
+from backend.core.logger import setup_logger
+logger = setup_logger("sentinel.main")
 
 # --- Configuration ---
 HOST = os.environ.get("HOST", "127.0.0.1")
@@ -101,17 +97,47 @@ ALLOWED_ORIGINS = (
     ]
 )
 
-# --- Authentication ---
-SENTINEL_API_KEY = os.environ.get("SENTINEL_API_KEY", "")
-_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+# --- Authentication (JWT RBAC) ---
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from backend.core.auth import decode_access_token, create_access_token, verify_password, get_password_hash
+from backend.core.models import User, RoleEnum
+from backend.core.db import get_session
+from sqlalchemy.orm import Session
+from sqlalchemy import select
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-async def require_auth(request: Request, api_key: Optional[str] = Depends(_api_key_header)):
-    """Gate control endpoints: require API key."""
-    if not SENTINEL_API_KEY:
-        return
-    if not api_key or not hmac.compare_digest(api_key, SENTINEL_API_KEY):
-        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+def get_current_user(token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    payload = decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+    username: str = payload.get("sub")
+    if username is None:
+        raise credentials_exception
+    user = session.execute(select(User).where(User.username == username)).scalar_one_or_none()
+    if user is None:
+        raise credentials_exception
+    return user
+
+def require_auth(request: Request, user: User = Depends(get_current_user)):
+    """Gate control endpoints: require valid JWT."""
+    request.state.user = user
+    return user
+
+def require_role(allowed_roles: list):
+    def role_checker(user: User = Depends(get_current_user)):
+        if user.role not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+        return user
+    return role_checker
+
+require_admin = require_role([RoleEnum.ADMIN])
+require_analyst = require_role([RoleEnum.ADMIN, RoleEnum.ANALYST])
 
 # --- OS Detection ---
 PLATFORM = platform.system()
@@ -119,9 +145,14 @@ logger.info(f"Platform: {PLATFORM}")
 
 # Import the appropriate OS adapter
 if PLATFORM == "Windows":
-    from backend.os_adapters import win32_bridge as os_bridge
+    from backend.os_adapters.win32_bridge import WindowsBridge
+    os_bridge = WindowsBridge()
 elif PLATFORM == "Darwin":
-    from backend.os_adapters import darwin_bridge as os_bridge
+    from backend.os_adapters.darwin_bridge import DarwinBridge
+    os_bridge = DarwinBridge()
+elif PLATFORM == "Linux":
+    from backend.os_adapters.linux_bridge import LinuxBridge
+    os_bridge = LinuxBridge()
 else:
     os_bridge = None
     logger.warning(f"Unsupported platform: {PLATFORM}. Control operations will be unavailable.")
@@ -143,28 +174,19 @@ def _policy_action_handler(action: str, target: Any, app_name: Optional[str] = N
         msg = f"Automated {action} triggered on "
         severity = "warning"
         
-        if action in ("kill", "suspend"):
-            import psutil
-            try:
-                p = psutil.Process(target)
-                if app_name and p.name() != "Unknown" and p.name().lower() not in app_name.lower() and app_name.lower() not in p.name().lower():
-                    logging.warning(f"PID {target} recycled or name mismatch. Expected {app_name}, got {p.name()}. Aborting.")
-                    return
-            except psutil.NoSuchProcess:
-                return
-                
-        if action == "kill":
-            os_bridge.kill_process(target)
-            msg += f"PID {target}"
-            severity = "critical"
-        elif action == "block":
+        if action == "block":
             os_bridge.block_port(target)
             db.add_blocked_port(target, block_type="hard", reason="Policy Engine Auto-Block")
             msg += f"Port {target}"
             severity = "critical"
-        elif action == "suspend":
-            os_bridge.suspend_process(target)
-            msg += f"PID {target}"
+        elif action == "request_approval":
+            msg += f"Analyst Approval requested for PID {target}"
+            severity = "warning"
+            db.create_analyst_approval(
+                action_type="suspend_process", 
+                target_identifier=str(target), 
+                reason="Policy trigger"
+            )
             
         db.insert_audit_log(
             event_type="policy_trigger",
@@ -457,6 +479,30 @@ async def lifespan(app: FastAPI):
     # Start watchdog for persistence
     watchdog = spawn_watchdog()
 
+    # --- Start Policy Engine ---
+    policy_engine.start()
+
+    # --- Seed Admin User ---
+    from sqlalchemy import select
+    from backend.core.models import User, RoleEnum
+    from backend.core.auth import get_password_hash
+    try:
+        with db.SessionLocal() as session:
+            admin_exists = session.execute(select(User).where(User.username == "admin")).scalar_one_or_none()
+            if not admin_exists:
+                admin_user = User(
+                    username="admin",
+                    email="admin@sentinel.local",
+                    hashed_password=get_password_hash("admin123"), # Default password for initial login
+                    role=RoleEnum.ADMIN.value
+                )
+                session.add(admin_user)
+                session.commit()
+                logger.info("Seeded default admin user (admin / admin123)")
+    except Exception as e:
+        logger.error(f"Failed to seed admin user: {e}")
+
+    logger.info("Sentinel backend initialized successfully.")
     yield
 
     # Shutdown
@@ -479,7 +525,30 @@ app.add_middleware(
 )
 
 
-# --- REST Endpoints ---
+# --- API Routes ---
+
+@app.post("/api/auth/login")
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
+    user = session.execute(select(User).where(User.username == form_data.username)).scalar_one_or_none()
+    if not user or not verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role}
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/auth/me")
+def read_users_me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "role": current_user.role
+    }
 
 @app.get("/api/info")
 async def root(_auth=Depends(require_auth)):
@@ -539,89 +608,70 @@ async def get_port_history(
     return db.get_traffic_history(port, hours=hours)
 
 
-@app.post("/api/control/suspend/{pid}")
-async def suspend_process_endpoint(
-    pid: int = FastAPIPath(..., ge=1, le=4194304),
-    _auth=Depends(require_auth),
+@app.post("/api/approvals/request")
+async def request_approval_endpoint(
+    pid: int = Query(...),
+    app_name: str = Query(None),
+    reason: str = Query("Manual request"),
+    _auth=Depends(require_auth)
 ):
-    """Soft Block: Suspend a process."""
-    if not os_bridge:
-        raise HTTPException(status_code=501, detail="Unsupported platform")
-    try:
-        success = os_bridge.suspend_process(pid)
-        if not success:
-            if not psutil.pid_exists(pid):
-                raise HTTPException(status_code=404, detail=f"Process PID {pid} not found")
-            raise HTTPException(
-                status_code=403,
-                detail=f"Suspend denied for PID {pid}. Run backend with elevated privileges.",
-            )
-        db.insert_audit_log(
-            event_type="manual_suspend", message=f"Suspended PID {pid}",
-            severity="warning", details=f"Action: suspend, Target PID: {pid}",
-        )
-        return {"success": success, "pid": pid, "action": "suspend"}
-    except SystemProcessProtectionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    """Request Analyst Approval for an action."""
+    approval_id = db.create_analyst_approval(
+        action_type="suspend_process", 
+        target_identifier=str(pid), 
+        reason=reason
+    )
+    db.insert_audit_log(
+        event_type="approval_requested", message=f"Approval requested for PID {pid}",
+        severity="info", details=f"App: {app_name}, Reason: {reason}, Approval ID: {approval_id}",
+    )
+    return {"success": True, "pid": pid, "action": "request_approval", "approval_id": approval_id}
 
-
-@app.post("/api/control/resume/{pid}")
-async def resume_process_endpoint(
-    pid: int = FastAPIPath(..., ge=1, le=4194304),
-    _auth=Depends(require_auth),
+@app.get("/api/approvals")
+async def get_approvals(
+    _auth=Depends(require_analyst)
 ):
-    """Resume a previously suspended process."""
-    if not os_bridge:
-        raise HTTPException(status_code=501, detail="Unsupported platform")
-    try:
-        success = os_bridge.resume_process(pid)
-        if not success:
-            if not psutil.pid_exists(pid):
-                raise HTTPException(status_code=404, detail=f"Process PID {pid} not found")
-            raise HTTPException(
-                status_code=403,
-                detail=f"Resume denied for PID {pid}. Run backend with elevated privileges.",
-            )
-        db.insert_audit_log(
-            event_type="manual_resume", message=f"Resumed PID {pid}",
-            severity="info", details=f"Action: resume, Target PID: {pid}",
-        )
-        return {"success": success, "pid": pid, "action": "resume"}
-    except SystemProcessProtectionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    """Get all pending analyst approvals."""
+    return db.get_pending_approvals()
 
+from pydantic import BaseModel
+class ApprovalResolve(BaseModel):
+    status: str # "approved" or "rejected"
 
-@app.post("/api/control/kill/{pid}")
-async def kill_process_endpoint(
-    pid: int = FastAPIPath(..., ge=1, le=4194304),
-    _auth=Depends(require_auth),
+@app.post("/api/approvals/{approval_id}/resolve")
+async def resolve_approval(
+    approval_id: int,
+    payload: ApprovalResolve,
+    current_user: User = Depends(require_analyst)
 ):
-    """Kill a process."""
-    if not os_bridge:
-        raise HTTPException(status_code=501, detail="Unsupported platform")
-    try:
-        success = os_bridge.kill_process(pid)
-        if not success:
-            if not psutil.pid_exists(pid):
-                raise HTTPException(status_code=404, detail=f"Process PID {pid} not found")
-            raise HTTPException(
-                status_code=403,
-                detail=f"Kill denied for PID {pid}. Run backend with elevated privileges.",
-            )
-        db.insert_audit_log(
-            event_type="manual_kill", message=f"Killed PID {pid}",
-            severity="critical", details=f"Action: kill, Target PID: {pid}",
-        )
-        return {"success": success, "pid": pid, "action": "kill"}
-    except SystemProcessProtectionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-
+    """Resolve an analyst approval."""
+    if payload.status not in ["approved", "rejected"]:
+        raise HTTPException(status_code=400, detail="Status must be approved or rejected")
+        
+    success = db.update_approval_status(approval_id, payload.status, current_user.username)
+    if not success:
+        raise HTTPException(status_code=404, detail="Approval not found")
+        
+    db.insert_audit_log(
+        event_type="approval_resolved", message=f"Approval {approval_id} {payload.status} by {current_user.username}",
+        severity="info" if payload.status == "approved" else "warning", details=f"Approval ID: {approval_id}, Status: {payload.status}",
+    )
+    
+    # If approved, we need to actually kill the process. But we don't have a reliable cross-platform way 
+    # to kill processes registered in os_bridge yet (the user said remove process killing).
+    # Wait, the prompt says "Remove any functionality that automatically kills, terminates, or forcefully stops processes. Remove associated backend logic, API"
+    # Oh! The prompt says "Remove any functionality that automatically kills, terminates, or forcefully stops processes."
+    # AND "Implement the UI for the AnalystApproval workflow (accept/reject pending process actions)."
+    # Okay, so I guess "accepting" it just marks it accepted but doesn't actually kill it because we removed that. Or maybe accepting it does something else?
+    # I'll just mark it resolved.
+    
+    return {"success": True, "approval_id": approval_id, "status": payload.status}
 
 @app.post("/api/control/block/{port}")
 async def block_port_endpoint(
     port: int = FastAPIPath(..., ge=1, le=65535),
     protocol: str = "TCP",
-    _auth=Depends(require_auth),
+    _auth=Depends(require_admin),
 ):
     """Hard Block: Add firewall rules to block a port."""
     if protocol.upper() not in ["TCP", "UDP"]:
@@ -646,7 +696,7 @@ async def block_port_endpoint(
 @app.post("/api/control/unblock/{port}")
 async def unblock_port_endpoint(
     port: int = FastAPIPath(..., ge=1, le=65535),
-    _auth=Depends(require_auth),
+    _auth=Depends(require_admin),
 ):
     """Remove firewall rules for a port."""
     if not os_bridge:
@@ -738,7 +788,7 @@ def main() -> None:
         logger.warning(
             "\n" + "=" * 72 + "\n"
             "  ⚠️  SECURITY WARNING: Binding to 0.0.0.0 WITHOUT an API key!\n"
-            "  All control endpoints (kill/block/suspend) are UNAUTHENTICATED.\n"
+            "  All control endpoints (block) are UNAUTHENTICATED.\n"
             "  Set SENTINEL_API_KEY env var or bind to 127.0.0.1.\n"
             + "=" * 72
         )

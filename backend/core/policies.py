@@ -2,7 +2,7 @@
 Sentinel Policy Engine — Automated Incident Response.
 
 Evaluates real-time metrics and threat intelligence flags against
-user-defined policies. Triggers automated actions (kill, block, suspend).
+user-defined policies. Triggers automated actions (request_approval, block, notify).
 """
 
 import logging
@@ -27,7 +27,7 @@ class Policy:
     exclude_apps: List[str] = None
     
     # Action
-    action: str = "notify"  # "kill", "block", "suspend", "notify"
+    action: str = "notify"  # "request_approval", "block", "notify"
     
     def __post_init__(self):
         if self.exclude_apps is None:
@@ -95,12 +95,10 @@ class PolicyEngine:
         logger.warning(f"POLICY TRIGGERED: '{policy.name}' on {snapshot.app_name} (Port {snapshot.port})")
         
         try:
-            if policy.action == "kill":
-                self._action_handler("kill", snapshot.pid, snapshot.app_name)
+            if policy.action == "request_approval":
+                self._action_handler("request_approval", snapshot.pid, snapshot.app_name)
             elif policy.action == "block":
                 self._action_handler("block", snapshot.port, snapshot.app_name)
-            elif policy.action == "suspend":
-                self._action_handler("suspend", snapshot.pid, snapshot.app_name)
             
             # Note: Notifications are handled by the caller or UI
         except Exception as e:

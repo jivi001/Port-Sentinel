@@ -20,8 +20,10 @@ htmlcov
 venv/
 ENV/
 
-# Node (root-level only — do NOT block frontend/node_modules here,
-# Dockerfile.frontend handles its own npm ci inside the build stage)
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 npm-debug.log
 yarn-error.log
 
