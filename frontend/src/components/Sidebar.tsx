@@ -16,7 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/',          label: 'DASHBOARD',       icon: '📊' },
   { to: '/processes', label: 'PROCESSES',       icon: '⚙️' },
   { to: '/history',   label: 'FORENSICS',       icon: '📈' },
-  { to: '/network',   label: 'INTELLIGENCE',    icon: '🌐' },
+  { to: '/network',   label: 'GLOBAL THREAT',    icon: '🌐' },
   { to: '/settings',  label: 'SETTINGS',        icon: '🔧' },
 ];
 
@@ -27,10 +27,10 @@ const Sidebar: React.FC = () => {
     <aside className="sidebar">
       <div className="sidebar__brand">
         <div className="sidebar__logo-container">
-          <div className="sidebar__logo">S</div>
+          <div className="sidebar__logo">V</div>
           <div className="sidebar__brand-text">
-            <h1 className="sidebar__title">SENTINEL</h1>
-            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>NETWORK_OPS</div>
+            <h1 className="sidebar__title">VIGILANT</h1>
+            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '0.1em' }}>THREAT_OPS</div>
           </div>
         </div>
       </div>

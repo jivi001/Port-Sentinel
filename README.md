@@ -1,369 +1,226 @@
-# Port Sentinel
+# Vigilant Enterprise Network Defense
 
-> **High-performance real-time network visibility and administrative control system.**
+> **Production-grade active network traffic visibility, threat detection, and analyst response control console.**
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-## 2. Overview
-
-**Port Sentinel** is an endpoint-focused active response and visibility console designed for system administrators, blue team operators, and security researchers.
-
-It solves the problem of "blind" endpoints by capturing live network traffic, mapping it to running processes in real-time, and enriching remote connections with threat intelligence. More than just an observability tool, Port Sentinel provides a **Control Plane** that allows operators—or an automated policy engine—to instantly kill/suspend malicious processes or hard-block suspicious network ports via native OS firewalls.
-
-**Business & Technical Value:**
-- **Zero-Latency Visibility:** Bypasses heavy logging agents by sniffing packets directly at the interface and sharing data via ultra-fast memory maps.
-- **Immediate Mitigation:** Cut off attackers instantly without waiting for EDR (Endpoint Detection and Response) cloud syncs.
-- **Automated Defense:** Local policy engine can automatically severe connections when traffic spikes or high-risk IPs are detected.
+[![License: Commercial](https://img.shields.io/badge/License-Commercial-red.svg)](#)
 
 ---
 
-## 3. Key Features
+## 1. Overview
 
-### 🛡️ Security & Control Features
-- **Process Manipulation:** Suspend, resume, or kill running processes mapped to active network sockets.
-- **Native Firewall Integration:** Hard-block inbound/outbound traffic on specific ports using native OS firewalls (Windows `netsh`, macOS `pfctl`).
-- **Safety Guardrails:** Hardcoded protections prevent operators from accidentally killing critical system processes (e.g., PID 0, 4).
+**Vigilant Enterprise Network Defense** is an endpoint-focused active response and visibility console designed for system administrators, security analysts (blue team operators), and enterprise operations teams. 
 
-### ⚡ Performance Features
-- **Shared Memory IPC:** Scapy sniffer runs in a dedicated process and writes to a 2MB fixed-size shared memory block, avoiding Python GIL locks and serialization overhead.
-- **Binary WebSocket Streaming:** Pushes real-time updates at 1Hz using `MsgPack` for minimal bandwidth usage.
-- **DOM Virtualization:** The React frontend uses `@tanstack/react-virtual` to smoothly render thousands of active connections without frame drops.
+Vigilant solves the problem of "blind" endpoints by capturing live network traffic, mapping it to active processes in real-time, and enriching remote connections with threat intelligence. Going beyond passive monitoring, Vigilant implements an **Analyst-in-the-Loop Control Plane** allowing operators or an automated policy engine to:
+1. **Hard-block suspicious network ports** natively using local OS firewalls.
+2. **Initiate an Analyst Approval workflow** to review and request process actions (such as suspending or resuming anomalous applications) without exposing automated endpoints to process manipulation exploits.
 
-### 🤖 Intelligence & Automation
-- **Automated Policy Engine:** Define rules to automatically trigger blocks/kills based on bandwidth thresholds, risk scores, or specific application behaviors.
-- **IP Threat Enrichment:** Resolves remote IP metadata (Organization, Country, Risk Score) via integrated Threat Intel (ipinfo.io).
-
-### 📊 Observability
-- **Traffic Accumulation:** Calculates accurate KB/s metrics (Inbound/Outbound) over sliding time windows.
-- **Time-Series Persistence:** Stores historical data locally in SQLite, with optional automated syncing to InfluxDB.
-- **Audit Logging:** Every manual or policy-driven mitigation action is heavily audited.
+### Key Value Propositions
+- **Zero-Latency Network Mapping:** Isolates raw packet sniffing to a dedicated sub-process writing directly to an HMAC-signed shared memory map, completely bypassing Python's GIL.
+- **Analyst-in-the-Loop Mitigation:** Prevents automated denial-of-service risks by running all process interventions through a structured review queue requiring explicit operator authorization.
+- **Enterprise Ready & Cross-Platform:** Native adapters implement firewalls and process resolution uniformly across Windows (`netsh`), macOS (`pfctl`), and Linux (`nftables`/`iptables`/`ufw`).
 
 ---
 
-## 4. Architecture
+## 2. Architecture
 
-Port Sentinel utilizes a dual-plane architecture combining a low-level packet sniffer with a high-concurrency API server.
+Vigilant utilizes a decoupled, high-performance architecture split into a low-level packet capture plane and a high-concurrency control API.
 
 ### Data Flow & Component Interaction
 
 ```mermaid
 graph TD
-    subgraph Data Plane [Packet Capture]
+    subgraph Data Capture Plane [Data Capture - Elevated Privileges]
         NIC[Network Interface]
         SCAPY[Scapy Sniffer Process]
         SHM[(Shared Memory 2MB)]
     end
 
-    subgraph Control Plane [Backend Process]
-        PS[psutil Connection Poller]
-        DISP[Async Dispatcher]
+    subgraph Control Plane [Vigilant Backend - FastAPI]
+        DISP[Async Dispatcher Loop]
         MET[Traffic Accumulator]
         POL[Policy Engine]
-        THREAT[Threat Intel Cache]
-        SQL[(SQLite / InfluxDB)]
-        OS[OS Control Adapters]
+        THREAT[Threat Intel cache]
+        DB[(SQLite / PostgreSQL)]
+        OS[OS Firewall & Process Adapters]
     end
 
-    subgraph Presentation
-        FAST[FastAPI REST]
+    subgraph Presentation Layer [Vigilant UI & Clients]
+        API[RESTful API & Gateway]
         WS[Socket.IO Gateway]
-        UI[React Dashboard]
+        UI[React Enterprise Panel]
     end
 
-    NIC -->|Packets| SCAPY
-    SCAPY -->|Fixed-size counters| SHM
-    SHM -->|1Hz Read| DISP
-    PS -->|Occupancy State| DISP
+    NIC -->|Raw Packets| SCAPY
+    SCAPY -->|Signed metrics map| SHM
+    SHM -->|1Hz Lock-Free Read| DISP
     
     DISP --> MET
     MET <--> THREAT
     MET --> POL
     
-    POL -->|Triggers| OS
-    OS -->|Block/Kill| NIC
+    POL -->|Auto-Block Port| OS
+    POL -->|Create Approval Request| DB
     
-    MET --> SQL
+    MET --> DB
     MET -->|MsgPack Payload| WS
-    FAST <--> OS
+    API <--> OS
     
     WS --> UI
-    UI <-->|Control Commands| FAST
+    UI <-->|REST Controls & Approvals| API
 ```
 
-### Architectural Decisions & Tradeoffs
-- **Multiprocessing over Async for Sniffing:** Packet sniffing is extremely CPU-bound. By isolating Scapy in a separate process and using `multiprocessing.shared_memory`, the FastAPI event loop remains entirely unblocked for handling API requests and WebSocket broadcasts.
-- **psutil Fallback:** Since `Scapy` requires elevated privileges and can sometimes miss instantaneous connection states, the dispatcher merges real traffic counters from the sniffer with process occupancy state from `psutil`. This ensures the UI always shows open ports, even if traffic is zero.
-- **Local SQLite First:** To maintain zero-dependency operations, SQLite is the primary datastore. InfluxDB is supported via an asynchronous writer for enterprise environments.
+### Key Architectural Decisions
+- **Multiprocessing IPC:** High-speed packet capturing is extremely CPU-bound. Isolating the Scapy packet sniffer to its own process allows FastAPI to handle hundreds of concurrent WebSocket and REST operations smoothly.
+- **HMAC Shared Memory Signatures:** To guarantee that local processes cannot inject fake metrics, the shared memory block is validated using a HMAC-SHA256 signature generated with an instance-specific key.
+- **Lock-Free Reads:** The async dispatcher reads the shared memory block using a lock-free verification pass. If a partial write is caught by the HMAC check, it retries in the next millisecond, eliminating read/write lock contention.
 
 ---
 
-## 5. Tech Stack
+## 3. Tech Stack
 
-### Backend
-| Technology | Purpose |
-|------------|---------|
-| **Python 3.10+** | Core runtime |
-| **FastAPI / Uvicorn** | High-performance async API server |
-| **Scapy** | Raw network packet capture |
-| **psutil** | Process introspection and network connection mapping |
-| **Python-SocketIO** | Bidirectional real-time event streaming |
-| **MsgPack** | High-efficiency binary serialization |
+### Core Platform
+- **Backend:** Python 3.12+, FastAPI, Uvicorn, SQLAlchemy ORM
+- **Frontend:** React 18, TypeScript, Vite, Vanilla CSS
+- **IPC:** multiprocessing.shared_memory, msgpack-python, @msgpack/msgpack
+- **Packet Sniffing:** Scapy (low-level network captures)
+- **Database:** SQLite (WAL mode) / PostgreSQL (via SQLAlchemy dialect auto-detection)
 
-### Frontend
-| Technology | Purpose |
-|------------|---------|
-| **React 18** | UI framework |
-| **TypeScript** | Type-safe frontend logic |
-| **Vite** | Build tooling and dev server |
-| **@tanstack/react-virtual** | High-performance table rendering |
-| **Recharts** | Analytics and time-series charting |
-
-### Storage & Infrastructure
-| Technology | Purpose |
-|------------|---------|
-| **SQLite (aiosqlite)** | Default embedded persistent storage |
-| **InfluxDB Client** | Optional time-series metrics sink |
-| **Docker / Nginx** | Containerized deployment options |
+### Infrastructure
+- **Docker:** Multi-stage Dockerfiles utilizing non-root users, security scans, and `compose` templates.
+- **CI/CD:** GitHub Actions workflow verifying macOS, Linux, and Windows matrix builds.
 
 ---
 
-## 6. Folder Structure
+## 4. Installation & Deployment
 
-```text
-Port-Sentinel/
-├── backend/                  # FastAPI + Socket.IO backend and OS control layer
-│   ├── main.py               # App entrypoint, orchestration, API endpoints
-│   ├── core/
-│   │   ├── sniffer.py        # Scapy packet capture + shared memory writer
-│   │   ├── metrics.py        # Byte delta -> KB/s logic + cache
-│   │   ├── db.py             # SQLite + InfluxDB + Supabase classes
-│   │   ├── policies.py       # Automation policy engine
-│   │   ├── threat_intel.py   # IP enrichment + risk scoring
-│   │   ├── watchdog.py       # Auto-restart monitor
-│   │   └── exceptions.py     # Domain exceptions (safety/control errors)
-│   ├── os_adapters/
-│   │   ├── win32_bridge.py   # Windows process + firewall controls
-│   │   ├── darwin_bridge.py  # macOS process + pfctl controls
-│   │   └── android_bridge.kt # Experimental mobile bridge
-│   └── data/                 # Local SQLite DB files
-├── frontend/                 # React + TypeScript dashboard
-│   ├── src/
-│   │   ├── pages/            # Main views (dashboard, processes)
-│   │   ├── components/       # Reusable UI components
-│   │   ├── hooks/            # Socket context and custom hooks
-│   │   └── services/         # API clients
-│   ├── package.json          # Frontend dependencies
-│   └── nginx.conf            # Reverse-proxy config for container
-├── tests/                    # Unit, integration, safety, and stress tests
-├── pyproject.toml            # Python dependencies and metadata
-├── docker-compose.yml        # Multi-service deployment
-├── run.bat                   # Windows startup script
-└── run.sh                    # Unix/macOS startup script
-```
+Vigilant requires elevated system privileges to sniff packets and adjust local firewalls.
+
+### Native Installation (Recommended)
+
+#### Prerequisites
+- **Python 3.10+** (Python 3.12 recommended)
+- **Node.js 20+**
+- **Administrator Privileges** (Windows Command Prompt run as Administrator, or Linux/macOS `sudo`)
+
+#### Windows Setup
+1. Clone the repository.
+2. Open Command Prompt **as Administrator**.
+3. Run the installer:
+   ```cmd
+   scripts\install.bat
+   ```
+4. Copy the environment template and set your configuration details (especially `VIGILANT_JWT_SECRET` and admin password):
+   ```cmd
+   copy .env.example .env
+   ```
+5. Launch the application background servers:
+   ```cmd
+   scripts\start.bat
+   ```
+6. To stop the services:
+   ```cmd
+   scripts\stop.bat
+   ```
+7. To update dependencies and check for codebase changes:
+   ```cmd
+   scripts\update.bat
+   ```
+
+#### Linux & macOS Setup
+1. Clone the repository and enter the directory.
+2. Run the installer:
+   ```bash
+   ./scripts/install.sh
+   ```
+3. Create your local configuration:
+   ```bash
+   cp .env.example .env
+   ```
+4. Launch the services (requires sudo for raw network capturing):
+   ```bash
+   sudo ./scripts/start.sh
+   ```
+5. To stop the services:
+   ```bash
+   sudo ./scripts/stop.sh
+   ```
+6. To pull updates and refresh dependencies:
+   ```bash
+   ./scripts/update.sh
+   ```
 
 ---
 
-## 7. Installation & Setup
+## 5. Environment Variables
 
-**Crucial Note:** Port Sentinel relies on deep OS integration (packet sniffing, firewall modification, process termination). It is highly recommended to run the backend **natively** on your host OS with elevated privileges. 
+Create a `.env` file in the root directory to configure the application:
 
-### Prerequisites
-- Python 3.10 or higher
-- Node.js 20+
-- Administrator (Windows) or Sudo (macOS/Linux) privileges
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `HOST` | Bind address for the backend server | `127.0.0.1` |
+| `PORT` | Bind port for the backend server | `8600` |
+| `VIGILANT_JWT_SECRET` | Secret key used to sign JWT session tokens (production critical) | *Autogenerated on start if empty* |
+| `VIGILANT_ADMIN_PASSWORD` | Seeds the default `admin` user's password on first run | *Autogenerated on start if empty* |
+| `DATABASE_URL` | SQLAlchemy connection string (SQLite/PostgreSQL) | `sqlite:///data/sentinel.db` |
+| `LOG_STORAGE_PATH` | Directory where security and audit logs are archived | `logs` |
+| `LOG_ENCRYPTION_KEY` | AES-256 Fernet key for encrypting archived logs at rest | *Disabled if empty* |
+| `IPINFO_TOKEN` | Geolocation and ASN enrichment API key (from ipinfo.io) | *Offline fallback if empty* |
 
-### 1. Clone the Repository
+---
+
+## 6. Features & Usage Guide
+
+Once the application is running, navigate your web browser to the frontend dashboard:
+- **Local Dev Server:** `http://localhost:5173/`
+- **Backend-Served SPA:** `http://127.0.0.1:8600/`
+
+### 1. Operational Dashboard
+- **Real-Time Throughput Widget:** Displays inbound and outbound network throughput in a sliding 60-second window.
+- **Top Talkers Widget:** Identifies high-bandwidth applications on the system.
+- **System Health:** Tracks active sniffer logs, monitored ports, and host system uptime.
+- **Pending Approvals Queue:** Allows analysts to approve or reject process action requests.
+
+### 2. Global Traffic Control
+- The central grid displays all active network ports, mapping them to the binding PID and application name.
+- Click **Block** to create a native OS firewall rule dropping inbound/outbound packets on that port.
+- Click **Suspend** to request an Analyst Approval ticket. The action is queued in the review board.
+
+### 3. Global Threat Globe
+- Under **Global Threat**, Vigilant renders an interactive 3D Globe displaying geographical mapping of remote threat locations using animated connection arcs.
+- The interface supports time-scrubbing controls and risk-threshold filtering.
+
+---
+
+## 7. Security & Compliance
+
+- **No Remote Kill Execution:** The platform implements zero endpoints that allow remote API clients to kill or suspend host processes directly. All process operations go through a database-persisted queue reviewed by human analysts.
+- **System Protection Guards:** OS Bridges hard-reject block/approval actions targeting critical system PIDs (such as PID `0`, `4` on Windows or `1` on Linux/macOS) to prevent denial of service.
+- **Audit Trails:** Every firewall modification, analyst approval resolution, and user login is written to the audit log database with session correlation identifiers.
+
+---
+
+## 8. Development & Testing
+
+We use `pytest` to verify backend security, stress, and adapter features.
+
+### Running Backend Tests
+Activate your virtual environment and execute:
 ```bash
-git clone https://github.com/your-org/port-sentinel.git
-cd port-sentinel
+python -m pytest tests/ -v --tb=short
 ```
 
-### 2. Environment Configuration
-Create a `.env` file in the root directory.
-
+### Frontend Build
+Compile the React bundle:
 ```bash
-cp .env.example .env
+cd frontend
+npm run build
 ```
 
-### 3. Native Local Development (Recommended)
-
-**Windows:**
-Open PowerShell or Command Prompt **as Administrator**.
-```bat
-run.bat
-```
-
-**macOS/Linux:**
-```bash
-sudo ./run.sh
-```
-*(The scripts handle virtual environment creation, pip installs, npm installs, and starting both servers concurrently.)*
-
-- Frontend URL: `http://localhost:5173`
-- Backend API: `http://localhost:8600`
-
-### 4. Docker Deployment
-While Docker is supported, it limits the backend's ability to manipulate host OS firewalls and processes. It is useful for UI development or read-only monitoring (requires `NET_ADMIN` capabilities).
-
-```bash
-docker compose up --build
-```
-- Dashboard: `http://localhost:8080`
-
 ---
 
-## 8. Environment Variables
+## 9. License
 
-| Variable | Purpose | Required | Example |
-| -------- | ------- | -------- | ------- |
-| `SENTINEL_API_KEY`| Token required for authenticating all control API calls | **Yes** | `your_secure_token` |
-| `HOST` | IP address to bind the API server | No | `127.0.0.1` |
-| `PORT` | Port for the API server | No | `8600` |
-| `IPINFO_TOKEN` | Token for IP geolocation & threat scoring | No | `your_token` |
-| `INFLUXDB_URL` | URL to InfluxDB for time-series export | No | `http://localhost:8086` |
-| `INFLUXDB_TOKEN` | Authentication token for InfluxDB | No | `your_token` |
-| `INFLUXDB_ORG` | InfluxDB Organization | No | `sentinel_org` |
-| `INFLUXDB_BUCKET`| InfluxDB Bucket name | No | `network_metrics` |
-| `SUPABASE_URL` | URL for Supabase remote sync | No | `https://xyz.supabase.co` |
-| `SUPABASE_KEY` | Supabase anon/service key | No | `your_jwt_key` |
-
----
-
-## 9. Usage
-
-Once the application is running:
-
-1. **Dashboard Overview:** View live connections, traffic rates, and risk scores. The table updates at 1Hz.
-2. **Process Management:** Click on any active process row to view options to **Suspend**, **Resume**, or **Kill** the process.
-3. **Firewall Control:** Click on a port to initiate a **Hard Block**. This writes a native OS firewall rule prefixed with `Sentinel_` to drop all traffic on that port.
-4. **Analytics:** View historical traffic spikes and top-talkers in the analytics tabs.
-5. **Auditing:** All actions taken through the UI or triggered by the Policy Engine are recorded in the `audit_logs` table.
-
----
-
-## 10. API Documentation
-
-Base URL: `http://localhost:8600`
-Interactive Swagger UI: `http://localhost:8600/docs`
-
-### Key Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | System liveness, uptime, tracked port count. |
-| `GET` | `/api/ports` | Current live port table (REST fallback for WS). |
-| `GET` | `/api/ports/{port}/history` | Historical traffic snapshots (query `?hours=24`). |
-| `POST` | `/api/control/kill/{pid}` | Terminates a process. Returns 403 if it is a protected system PID. |
-| `POST` | `/api/control/block/{port}` | Adds an OS firewall rule (TCP/UDP). |
-| `POST` | `/api/control/unblock/{port}` | Removes the `Sentinel_` firewall rule. |
-| `GET` | `/api/audit/logs` | Fetch recent security and policy actions. |
-
-### WebSocket Protocol
-Connect a Socket.IO client to `/ws`. The server emits a `port_table` event containing a `MsgPack` encoded array of active connections every 1 second.
-
----
-
-## 11. Security
-
-- **Authentication & API Keys:** All destructive control paths (Kill, Block, Suspend) are fully protected by `SENTINEL_API_KEY` authentication using the `X-API-Key` header.
-- **IPC Integrity:** Shared Memory entries are strongly signed using HMAC (SHA-256) to prevent tampering by unauthorized local processes.
-- **System PID Protection:** The backend OS adapters actively refuse to kill or suspend critical processes (e.g., PID `0` or `4` on Windows, `0` or `1` on macOS) throwing a `SystemProcessProtectionError`.
-- **Namespaced OS Rules:** All firewall rules created by the system are prefixed with `Sentinel_`. On graceful shutdown (via `atexit` hooks), the system automatically cleans up its own rules (or scoped anchor rules like `com.sentinel` on macOS) to ensure no ports are permanently blocked by accident.
-- **Audit Logging:** Every destructive action (kill/block) is recorded locally in SQLite with a timestamp, target, and reason (User action vs. Policy trigger).
-- **Execution Context:** The application requires elevated privileges (`sudo` / Admin). By default, it binds to `127.0.0.1` and will refuse to expose control plane APIs to `0.0.0.0` without a strong API key configured.
-
----
-
-## 12. Performance Optimization
-
-- **Zero-Copy IPC:** Uses `multiprocessing.shared_memory` to transfer high-frequency packet counters from the Scapy sniffer process to the main API loop. This bypasses the Python Global Interpreter Lock (GIL) and avoids expensive JSON/Pickle serialization.
-- **MsgPack over WebSockets:** Live port tables are pushed to the frontend using binary `MsgPack` compression, significantly reducing network overhead compared to JSON.
-- **Frontend DOM Virtualization:** The React dashboard utilizes `@tanstack/react-virtual`. Instead of rendering 5,000 DOM rows for 5,000 active connections, it only renders the ~20 rows currently visible in the user's viewport.
-
----
-
-## 13. Testing
-
-Port Sentinel uses `pytest` for a multi-tiered testing strategy.
-
-```bash
-cd backend
-pytest -v
-```
-
-**Test Suites (`tests/`):**
-- **Unit (`unit/`):** Logic tests for metrics calculations and policy engine rule evaluation.
-- **Integration (`integration/`):** Tests the async dispatcher and shared memory merging logic.
-- **Safety (`safety/`):** Ensures that OS Adapters refuse to operate on protected PIDs and properly format firewall commands without executing them.
-
----
-
-## 14. Screenshots
-
-- **Live Traffic Dashboard**
-  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175203" src="https://github.com/user-attachments/assets/0e6645be-d7f5-4e28-b1f4-bd602f50342c" />
-
-- **Process Analytics & Drilldown**
-  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175214" src="https://github.com/user-attachments/assets/630cedf4-34c3-4a9d-81df-ea11639b3cc1" />
-
-- **Interactive Settings**
-  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175222" src="https://github.com/user-attachments/assets/c954f35d-38a1-4488-b53d-16895230a5f6" />
-
-- **Policy Manager**
-  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175230" src="https://github.com/user-attachments/assets/3d68a96f-c663-4b1a-81f4-230c9c5ebb95" />
-
-- **Blocked Connections Overview**
-  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175240" src="https://github.com/user-attachments/assets/170ed3ac-84ef-474f-9447-1019fcc34141" />
-
-- **Detailed Telemetry Streams**
-  <img width="1920" height="1080" alt="Screenshot 2026-03-22 175250" src="https://github.com/user-attachments/assets/9437fee4-1d9c-4455-8cdc-39eaff17f104" />
-
----
-
-## 15. Roadmap
-
-- [ ] **Linux `iptables`/`ufw` Support:** Add full `linux_bridge.py` support for blocking ports natively on Ubuntu/Debian servers.
-- [ ] **Custom Policy Builder:** Implement a UI for operators to drag-and-drop policy rules (e.g., "If Outbound KB/s > 5000 AND Risk > 80 -> Block Port").
-- [ ] **eBPF Sniffer:** Replace Scapy with an eBPF-based sniffer for kernel-level packet capture, further reducing CPU overhead.
-
----
-
-## 16. Troubleshooting
-
-**Error: "Access denied reading net_connections" or Sniffer fails to start.**
-**Fix:** You must run the backend with elevated privileges. Open your terminal as Administrator (Windows) or use `sudo` (Linux/macOS).
-
-**Error: `The token '&&' is not a valid statement separator` (Windows PowerShell)**
-**Fix:** If you are running commands manually in PowerShell, use `;` instead of `&&`. The provided `run.bat` script handles this correctly.
-
-**Error: Changes made to code are not reflecting.**
-**Fix:** The frontend uses Vite with Hot Module Replacement (HMR). The backend uses Uvicorn. Ensure you are passing the `--reload` flag to Uvicorn if starting it manually.
-
----
-
-## 17. Contributing
-
-1. Fork the project.
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
-3. Ensure you do not break the safety protections in `os_adapters/`.
-4. Run the test suite: `pytest`.
-5. Commit your changes (`git commit -m 'feat: Add AmazingFeature'`).
-6. Push to the branch (`git push origin feature/AmazingFeature`).
-7. Open a Pull Request.
-
----
-
-## 18. License
-
-Distributed under the MIT License. See `LICENSE` for more information.
-
----
-
-## 19. Acknowledgements
-
-- Network packet analysis powered by [Scapy](https://scapy.net/).
-- System introspection via [psutil](https://github.com/giampaolo/psutil).
-- Fast binary serialization using [MsgPack](https://msgpack.org/).
+This project is licensed under the MIT License. See `LICENSE` for details.

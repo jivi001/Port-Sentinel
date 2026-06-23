@@ -77,6 +77,12 @@ export const apiService = {
     apiService._call(`/audit/logs?limit=${limit}`),
   getTopTalkers: async (hours: number = 24, limit: number = 10): Promise<any[]> => 
     apiService._call(`/analytics/top-talkers?hours=${hours}&limit=${limit}`),
+  getThreatGeo: async (minRisk: number = 0): Promise<any[]> => 
+    apiService._call(`/threats/geo?min_risk=${minRisk}`),
+  getThreatCountries: async (): Promise<any[]> => 
+    apiService._call('/threats/countries'),
+  getThreatTimeline: async (hours: number = 24): Promise<any[]> => 
+    apiService._call(`/threats/timeline?hours=${hours}`),
 
   blockPort: async (port: number, protocol: string = 'TCP'): Promise<boolean> => {
     const res = await apiService._call(`/control/block/${port}?protocol=${protocol}`, { method: 'POST' });
@@ -100,6 +106,17 @@ export const apiService = {
     const res = await apiService._call(`/approvals/${approvalId}/resolve`, { 
       method: 'POST',
       body: JSON.stringify({ status })
+    });
+    return !!res.success;
+  },
+
+  getPreferences: async (): Promise<Record<string, string>> => 
+    apiService._call('/auth/preferences'),
+
+  setPreferences: async (prefs: Record<string, string>): Promise<boolean> => {
+    const res = await apiService._call('/auth/preferences', { 
+      method: 'POST', 
+      body: JSON.stringify(prefs) 
     });
     return !!res.success;
   },

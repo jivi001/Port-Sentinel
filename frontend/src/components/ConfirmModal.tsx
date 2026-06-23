@@ -1,8 +1,8 @@
 /**
- * Sentinel — ConfirmModal Component
+ * Vigilant — ConfirmModal Component
  *
- * Reusable confirmation dialog for destructive actions (kill, block, etc.).
- * Glassmorphism-themed overlay with cancel/confirm buttons.
+ * Reusable confirmation dialog for destructive actions (block, resolve, etc.).
+ * Uses the pre-configured vanilla CSS modal and button styles.
  */
 
 import React from 'react';
@@ -31,29 +31,26 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity" onClick={onCancel}>
-      <div className="bg-surface border border-border-main rounded-xl shadow-2xl max-w-md w-full m-4 p-6 flex flex-col gap-4 transform transition-transform scale-100" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <span style={{ fontSize: '1.5rem' }}>
             {variant === 'danger' ? '⚠️' : variant === 'warning' ? '⚡' : 'ℹ️'}
           </span>
-          <h3 className="text-lg font-bold text-text-main tracking-wide">{title}</h3>
+          <h3 className="modal-title" style={{ margin: 0 }}>{title}</h3>
         </div>
-        <p className="text-text-muted text-sm leading-relaxed">{message}</p>
-        <div className="flex justify-end gap-3 mt-4">
-          <button 
-            className="px-4 py-2 rounded-lg font-bold text-xs bg-transparent text-text-muted hover:bg-hover hover:text-text-main border border-transparent transition-colors" 
-            onClick={onCancel}
-          >
+        <p className="modal-message">{message}</p>
+        <div className="modal-actions">
+          <button className="btn" onClick={onCancel}>
             {cancelLabel}
           </button>
           <button 
-            className={`px-4 py-2 rounded-lg font-bold text-xs border border-transparent transition-colors ${
+            className={`btn ${
               variant === 'danger' 
-                ? 'bg-danger/10 text-danger hover:bg-danger/20 border-danger/30' 
+                ? 'btn--danger' 
                 : variant === 'warning' 
-                  ? 'bg-warning/10 text-warning hover:bg-warning/20 border-warning/30' 
-                  : 'bg-primary/10 text-primary hover:bg-primary/20 border-primary/30'
+                  ? 'btn--primary' 
+                  : 'btn--primary'
             }`} 
             onClick={onConfirm}
           >

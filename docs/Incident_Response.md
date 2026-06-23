@@ -1,7 +1,7 @@
 # Incident Response Plan
 
 ## Overview
-When SentientShield AI detects anomalous network drift or high-risk connections, it triggers an alert and optionally queues a process intervention request for analyst approval.
+When Vigilant detects anomalous network drift or high-risk connections, it triggers an alert and optionally queues a process intervention request for analyst approval.
 
 ## Alert Triage Workflow
 1. **Detection:** The system highlights anomalous traffic in the "Operational Dashboard" and plots the geographic origin in the "Global Threat Intelligence" topology map.

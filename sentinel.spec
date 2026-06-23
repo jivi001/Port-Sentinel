@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Port Sentinel — PyInstaller Spec File
+Vigilant — PyInstaller Spec File
 
 Build with:  pyinstaller sentinel.spec
-Output:      dist/PortSentinel.exe
+Output:      dist/Vigilant.exe
 """
 
 import os
@@ -138,7 +138,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='PortSentinel',
+    name='Vigilant',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

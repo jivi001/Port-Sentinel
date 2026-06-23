@@ -10,9 +10,14 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8600
-      SENTINEL_JWT_SECRET: "CHANGE_ME_BEFORE_DEPLOY_SUPER_SECRET"
-      SENTINEL_CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8600,http://127.0.0.1:8600,http://frontend:80"
-      SQLITE_DB_PATH: data/sentinel.db
+      # Require custom JWT secret for session signing
+      VIGILANT_JWT_SECRET: "CHANGE_ME_BEFORE_DEPLOY_SUPER_SECRET"
+      VIGILANT_CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8600,http://127.0.0.1:8600,http://frontend:80"
+      
+      # Database connection. Falls back to local SQLite if left empty
+      # DATABASE_URL: postgresql://vigilant_admin:strong_postgres_password_123@db:5432/vigilant
+      
+      # Optional InfluxDB integration for time-series logging
       INFLUXDB_URL: http://influxdb:8086
       INFLUXDB_TOKEN: your_token_here
       INFLUXDB_ORG: sentinel
@@ -54,6 +59,21 @@ services:
     networks:
       - sentinel-network
 
+  # Enterprise-Grade PostgreSQL Backend (Optional / Production)
+  db:
+    image: postgres:15-alpine
+    container_name: sentinel-postgres
+    environment:
+      POSTGRES_USER: vigilant_admin
+      POSTGRES_PASSWORD: strong_postgres_password_123
+      POSTGRES_DB: vigilant
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - sentinel-network
+
+  # Time-series metrics engine (Optional)
   influxdb:
     image: influxdb:2.7
     container_name: sentinel-influxdb
@@ -80,6 +100,8 @@ volumes:
   sentinel-data:
     driver: local
   sentinel-logs:
+    driver: local
+  postgres-data:
     driver: local
   influxdb-data:
     driver: local

@@ -1,4 +1,4 @@
-name: CI
+name: Vigilant Enterprise CI
 
 on:
   push:
@@ -8,7 +8,13 @@ on:
 
 jobs:
   backend-test:
-    runs-on: ubuntu-latest
+    name: Backend Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
     steps:
     - uses: actions/checkout@v4
     
@@ -22,21 +28,23 @@ jobs:
         python -m pip install --upgrade pip
         pip install .[dev]
         
-    - name: Lint with ruff
+    - name: Lint check with ruff
       run: |
         pip install ruff
         ruff check backend/
         
-    - name: Security audit with pip-audit
+    - name: Security Audit (pip-audit)
+      # Skip on windows/macos matrix if pip-audit has platform issues, but runs fine on all
       run: |
         pip install pip-audit
         pip-audit --desc on
         
-    - name: Run pytest
+    - name: Run Pytest Suite
       run: |
-        pytest tests/
+        pytest tests/ -v
 
   frontend-test:
+    name: Frontend Build & Lint
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -47,13 +55,13 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: "18"
+        node-version: "20"
         
     - name: Install dependencies
       run: npm ci
       
-    - name: Type check
-      run: npm run tsc || true  # Allows pipeline to pass if only minor warnings exist initially
+    - name: Strict TypeScript Compilation Check
+      run: npx tsc -b
       
-    - name: Build
+    - name: Production Build Compilation
       run: npm run build

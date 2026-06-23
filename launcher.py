@@ -1,5 +1,5 @@
 """
-Port Sentinel — PyInstaller Entry Point (launcher.py)
+Vigilant — PyInstaller Entry Point (launcher.py)
 
 This is the single entry point used by PyInstaller to build the .exe.
 It handles:
@@ -41,6 +41,7 @@ def main():
     base_dir = _get_base_dir()
 
     # Set environment so backend modules can find bundled resources
+    os.environ.setdefault("VIGILANT_BASE_DIR", base_dir)
     os.environ.setdefault("SENTINEL_BASE_DIR", base_dir)
 
     # Load .env from the bundled location if it exists
@@ -55,6 +56,7 @@ def main():
     # Ensure the data directory exists for SQLite
     data_dir = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else base_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
+    os.environ.setdefault("VIGILANT_DATA_DIR", data_dir)
     os.environ.setdefault("SENTINEL_DATA_DIR", data_dir)
 
     # Auto-open browser

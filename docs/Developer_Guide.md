@@ -1,4 +1,4 @@
-# Developer Guide: SentientShield AI
+# Developer Guide: Vigilant
 
 ## Setup Instructions
 

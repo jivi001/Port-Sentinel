@@ -13,6 +13,7 @@ import requests
 import ipaddress
 from typing import Set, Dict, Optional
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger("sentinel.threat_intel")
 
@@ -31,6 +32,7 @@ class ThreatIntel:
         self._lock = threading.Lock()
         self._MAX_CACHE_SIZE = 10000
         self._CACHE_TTL = 3600.0
+        self._executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="threat_intel")
         
         # Initial bootstrap
         self._bootstrap_list()
@@ -71,10 +73,21 @@ class ThreatIntel:
                 response = requests.get(url, headers=headers, timeout=2)
                 if response.status_code == 200:
                     data = response.json()
+                    loc = data.get("loc", "")
+                    lat, lon = 0.0, 0.0
+                    if loc and "," in loc:
+                        try:
+                            lat_part, lon_part = loc.split(",", 1)
+                            lat = float(lat_part.strip())
+                            lon = float(lon_part.strip())
+                        except ValueError:
+                            pass
                     metadata = {
                         "org": data.get("org", "Unknown Provider"),
                         "city": data.get("city", "Unknown"),
                         "country": data.get("country", "??"),
+                        "latitude": lat,
+                        "longitude": lon,
                         "risk": 10 if ip in self._malicious_ips else 0
                     }
                     with self._lock:
@@ -90,12 +103,12 @@ class ThreatIntel:
         # Cache miss - return placeholder and fetch in background
         with self._lock:
             # Mark as pending to prevent multiple threads fetching the same IP
-            self._metadata_cache[ip] = {"org": "Resolving...", "country": "??", "risk": 0}
+            self._metadata_cache[ip] = {"org": "Resolving...", "country": "??", "latitude": 0.0, "longitude": 0.0, "risk": 0}
             self._cache_timestamps[ip] = time.time()
         
-        threading.Thread(target=_fetch_background, daemon=True).start()
+        self._executor.submit(_fetch_background)
         
-        return {"org": "Resolving...", "country": "??", "risk": 0}
+        return {"org": "Resolving...", "country": "??", "latitude": 0.0, "longitude": 0.0, "risk": 0}
 
     def is_malicious(self, ip: str) -> bool:
         return ip in self._malicious_ips

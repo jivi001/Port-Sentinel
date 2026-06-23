@@ -1,5 +1,5 @@
 /**
- * Sentinel Frontend — TypeScript Types
+ * Vigilant Frontend — TypeScript Types
  */
 
 /** Single port entry in the port table emitted at 1Hz */
@@ -30,8 +30,8 @@ export interface SparklinePoint {
   kbOut: number;
 }
 
-/** Control action types */
-export type ControlAction = "suspend" | "resume" | "kill" | "block" | "unblock";
+/** Control action types — no process termination */
+export type ControlAction = "request_approval" | "block" | "unblock";
 
 /** API response for control actions */
 export interface ControlResponse {
@@ -44,6 +44,8 @@ export interface ControlResponse {
 /** Health check response */
 export interface HealthResponse {
   status: string;
+  product: string;
+  version: string;
   platform: string;
   sniffer_alive: boolean;
   ports_tracked: number;
@@ -54,6 +56,64 @@ export interface HealthResponse {
 export interface BlockedPort {
   port: number;
   block_type: string;
+  blocked_at: number;
   reason: string;
-  created_at: string;
+}
+
+/** Analyst approval record */
+export interface AnalystApproval {
+  id: number;
+  created_at: number;
+  action_type: string;
+  target_identifier: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  risk_score: number;
+}
+
+/** Audit log entry */
+export interface AuditLogEntry {
+  id: number;
+  timestamp: number;
+  event_type: string;
+  app_name: string | null;
+  port: number | null;
+  pid: number | null;
+  severity: string;
+  message: string;
+  details: string | null;
+}
+
+/** Geo threat data for globe visualization */
+export interface GeoThreatEntry {
+  ip: string;
+  port: number;
+  app_name: string;
+  country: string;
+  org: string;
+  risk_score: number;
+  kb_s_in: number;
+  kb_s_out: number;
+  protocol: string;
+  lat?: number;
+  lng?: number;
+}
+
+/** Country-level threat statistics */
+export interface CountryStats {
+  country: string;
+  connections: number;
+  total_risk: number;
+  total_kb_s: number;
+}
+
+/** Dashboard layout item */
+export interface LayoutItem {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  minH?: number;
 }

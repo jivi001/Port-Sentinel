@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
           fontFamily: 'monospace'
         }}>
           <h2 style={{ color: 'var(--accent-red, #ff4444)' }}>System Error</h2>
-          <p>The Sentinel dashboard encountered an unexpected exception.</p>
+          <p>The Vigilant dashboard encountered an unexpected exception.</p>
           <pre style={{ 
             background: 'rgba(0,0,0,0.5)', 
             padding: '16px', 
