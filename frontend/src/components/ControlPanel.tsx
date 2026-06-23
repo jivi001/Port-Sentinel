@@ -26,7 +26,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ filter, onFilterChange }) =
   }, [localFilter, onFilterChange]);
 
   return (
-    <div className="flex items-center gap-3 flex-1 max-w-[400px]">
+    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, maxWidth: '400px' }}>
       <input
         type="text"
         placeholder="SEARCH ACTIVE NODES..."
@@ -34,7 +34,18 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ filter, onFilterChange }) =
         onChange={(e) => setLocalFilter(e.target.value)}
         autoComplete="off"
         spellCheck={false}
-        className="w-full bg-secondary border border-border-main rounded-md px-4 py-2 text-text-main text-[0.7rem] font-bold tracking-widest outline-none focus:border-primary transition-colors placeholder-text-dim"
+        style={{
+          width: '100%',
+          background: 'var(--bg-glass)',
+          border: '1px solid var(--border-default)',
+          borderRadius: '6px',
+          padding: '8px 16px',
+          color: 'white',
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          letterSpacing: '0.05em',
+          outline: 'none',
+        }}
       />
     </div>
   );

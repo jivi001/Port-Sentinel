@@ -1,12 +1,11 @@
 /**
- * Sentinel — Professional Forensics & Analyst Approvals Page
+ * Sentinel — Professional Forensics Page
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { AreaChart, Area, ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts';
 import { useSocketContext } from '../hooks/SocketContext';
 import { apiService } from '../services/apiService';
-import { useTheme } from '../hooks/ThemeContext';
 
 const TIME_RANGES = [
   { label: '1H', hours: 1 },
@@ -16,14 +15,11 @@ const TIME_RANGES = [
 
 const HistoricalLogsPage: React.FC = () => {
   const { portTable } = useSocketContext();
-  const { theme } = useTheme();
   const [selectedPort, setSelectedPort] = useState<number | null>(null);
   const [selectedRange, setSelectedRange] = useState(1);
   const [history, setHistory] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [approvals, setApprovals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'audit' | 'approvals'>('audit');
 
   const fetchHistory = useCallback(async () => {
     if (selectedPort == null) return;
@@ -45,47 +41,28 @@ const HistoricalLogsPage: React.FC = () => {
     }
   }, []);
 
-  const fetchApprovals = useCallback(async () => {
-    try {
-      const data = await apiService.getApprovals();
-      setApprovals(data);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
   useEffect(() => {
     fetchAuditLogs();
-    fetchApprovals();
     if (selectedPort != null) fetchHistory();
-  }, [selectedPort, selectedRange, fetchHistory, fetchAuditLogs, fetchApprovals]);
-
-  const handleResolve = async (id: number, status: 'approved' | 'rejected') => {
-    try {
-      await apiService.resolveApproval(id, status);
-      fetchApprovals();
-      fetchAuditLogs();
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  }, [selectedPort, selectedRange, fetchHistory, fetchAuditLogs]);
 
   return (
-    <div className="page-container h-full w-full flex flex-col">
-      <header className="page-header flex justify-between items-center mb-4 shrink-0">
-        <h1 className="page-title text-3xl font-bold text-text-main tracking-tight">Forensic Analysis</h1>
-        <div className="flex gap-4 items-center">
-          <div className="flex bg-secondary p-1 rounded-lg border border-border-main">
+    <div className="page-container">
+      <header className="page-header">
+        <h1 className="page-title">Forensic Analysis</h1>
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <div className="btn-group">
             {TIME_RANGES.map((r) => (
               <button 
                 key={r.hours} 
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-colors ${selectedRange === r.hours ? 'bg-primary text-white' : 'text-text-muted hover:text-text-main hover:bg-hover'}`}
+                className={`btn ${selectedRange === r.hours ? 'btn--active' : ''}`}
                 onClick={() => setSelectedRange(r.hours)}
               >{r.label}</button>
             ))}
           </div>
           <select 
-            className="bg-secondary border border-border-main text-text-main px-4 py-2 rounded-lg text-sm font-bold focus:outline-none focus:border-primary"
+            className="btn" 
+            style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', color: 'white' }}
             value={selectedPort ?? ''} 
             onChange={(e) => setSelectedPort(e.target.value ? Number(e.target.value) : null)}
           >
@@ -93,116 +70,62 @@ const HistoricalLogsPage: React.FC = () => {
             {[...new Set(portTable.map(p => p.port))].sort((a,b) => a-b).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           {loading && (
-            <span className="text-text-muted text-xs tracking-widest font-bold animate-pulse">LOADING_HISTORY</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em' }}>LOADING_HISTORY</span>
           )}
         </div>
       </header>
 
       {/* Traffic Visualization */}
       {selectedPort && history.length > 0 && (
-        <section className="bg-surface border border-border-main rounded-xl shadow-lg mb-6 shrink-0 overflow-hidden">
-          <div className="p-4 bg-secondary/50 border-b border-border-main">
-            <h2 className="text-xs font-bold text-text-muted uppercase tracking-widest">Port {selectedPort} Throughput</h2>
+        <section className="sentinel-section">
+          <div className="sentinel-section__header">
+            <h2 className="sentinel-section__title">Port {selectedPort} Throughput</h2>
           </div>
-          <div className="w-full h-48 p-4">
+          <div style={{ width: '100%', height: 200, padding: '20px' }}>
             <ResponsiveContainer>
               <AreaChart data={history}>
-                <CartesianGrid strokeDasharray="3 3" stroke={theme === 'light' ? '#e2e8f0' : '#1F2937'} vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-dim)" vertical={false} />
                 <XAxis dataKey="timestamp" hide />
                 <YAxis hide />
-                <Tooltip contentStyle={{ background: theme === 'light' ? '#ffffff' : '#111827', border: `1px solid ${theme === 'light' ? '#e2e8f0' : '#1F2937'}`, borderRadius: '8px' }} />
-                <Area type="monotone" dataKey="kb_s_in" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.1} isAnimationActive={false} />
-                <Area type="monotone" dataKey="kb_s_out" stroke="#F59E0B" fill="#F59E0B" fillOpacity={0.1} isAnimationActive={false} />
+                <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: '8px' }} />
+                <Area type="monotone" dataKey="kb_s_in" stroke="var(--accent-blue)" fill="var(--accent-blue)" fillOpacity={0.1} isAnimationActive={false} />
+                <Area type="monotone" dataKey="kb_s_out" stroke="var(--accent-orange)" fill="var(--accent-orange)" fillOpacity={0.1} isAnimationActive={false} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </section>
       )}
 
-      {/* Logs and Approvals */}
-      <section className="bg-surface border border-border-main rounded-xl shadow-lg flex flex-col flex-1 min-h-0 overflow-hidden">
-        <div className="p-4 bg-secondary/50 border-b border-border-main flex justify-between items-center">
-          <div className="flex gap-4">
-            <button 
-              className={`text-xs font-bold uppercase tracking-widest pb-1 border-b-2 transition-colors ${activeTab === 'audit' ? 'text-primary border-primary' : 'text-text-muted border-transparent hover:text-text-main'}`}
-              onClick={() => setActiveTab('audit')}
-            >
-              Security Events Audit
-            </button>
-            <button 
-              className={`text-xs font-bold uppercase tracking-widest pb-1 border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'approvals' ? 'text-primary border-primary' : 'text-text-muted border-transparent hover:text-text-main'}`}
-              onClick={() => setActiveTab('approvals')}
-            >
-              Pending Approvals
-              {approvals.length > 0 && <span className="bg-warning text-white px-1.5 py-0.5 rounded-full text-[10px]">{approvals.length}</span>}
-            </button>
-          </div>
-          <button className="text-xs font-bold text-text-muted hover:text-text-main transition-colors" onClick={() => { fetchAuditLogs(); fetchApprovals(); }}>REFRESH</button>
+      {/* Audit Logs */}
+      <section className="sentinel-section" style={{ flex: 1, minHeight: 0 }}>
+        <div className="sentinel-section__header">
+          <h2 className="sentinel-section__title">Security Events Audit</h2>
+          <button className="btn" onClick={fetchAuditLogs}>REFRESH_LOGS</button>
         </div>
-
-        {activeTab === 'audit' && (
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center p-4 bg-secondary border-b border-border-main text-xs font-bold text-text-muted uppercase tracking-widest gap-4">
-              <div className="w-24">TIMESTAMP</div>
-              <div className="w-32">EVENT</div>
-              <div className="w-48">TARGET</div>
-              <div className="w-24">SEVERITY</div>
-              <div className="flex-1">MESSAGE</div>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {auditLogs.length === 0 ? (
-                <div className="p-16 text-center text-text-muted text-sm font-bold tracking-wider">NO SECURITY EVENTS DETECTED</div>
-              ) : (
-                auditLogs.map((log) => (
-                  <div key={log.id} className="flex items-center p-4 border-b border-border-main/50 hover:bg-hover transition-colors gap-4">
-                    <div className="w-24 font-mono text-xs text-text-muted">{new Date(log.timestamp * 1000).toLocaleTimeString()}</div>
-                    <div className="w-32 font-mono text-xs text-primary">{log.event_type.toUpperCase()}</div>
-                    <div className="w-48 font-mono text-xs text-text-main truncate">{log.app_name || `PORT ${log.port}`}</div>
-                    <div className={`w-24 font-mono text-xs font-bold ${log.severity === 'critical' ? 'text-danger' : log.severity === 'warning' ? 'text-warning' : 'text-accent'}`}>{log.severity.toUpperCase()}</div>
-                    <div className="flex-1 text-sm text-text-main/80 truncate">{log.message}</div>
-                  </div>
-                ))
-              )}
-            </div>
+        <div className="data-table-container">
+          <div className="data-table-header">
+            <div className="col-md">TIMESTAMP</div>
+            <div className="col-md">EVENT</div>
+            <div className="col-lg">TARGET</div>
+            <div className="col-sm">SEVERITY</div>
+            <div className="col-flex">MESSAGE</div>
           </div>
-        )}
-
-        {activeTab === 'approvals' && (
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex items-center p-4 bg-secondary border-b border-border-main text-xs font-bold text-text-muted uppercase tracking-widest gap-4">
-              <div className="w-24">TIMESTAMP</div>
-              <div className="w-32">ACTION</div>
-              <div className="w-32">TARGET ID</div>
-              <div className="flex-1">REASON</div>
-              <div className="w-48 text-right">RESOLUTION</div>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {approvals.length === 0 ? (
-                <div className="p-16 text-center text-text-muted text-sm font-bold tracking-wider">NO PENDING APPROVALS</div>
-              ) : (
-                approvals.map((app) => (
-                  <div key={app.id} className="flex items-center p-4 border-b border-border-main/50 hover:bg-hover transition-colors gap-4">
-                    <div className="w-24 font-mono text-xs text-text-muted">{new Date(app.created_at * 1000).toLocaleTimeString()}</div>
-                    <div className="w-32 font-mono text-xs text-warning">{app.action_type.toUpperCase()}</div>
-                    <div className="w-32 font-mono text-xs text-text-main truncate">{app.target_identifier}</div>
-                    <div className="flex-1 text-sm text-text-main/80 truncate">{app.reason}</div>
-                    <div className="w-48 text-right flex justify-end gap-2">
-                      <button 
-                        className="px-3 py-1 rounded-md text-xs font-bold bg-transparent text-danger hover:bg-danger/10 border border-transparent hover:border-danger/30 transition-colors"
-                        onClick={() => handleResolve(app.id, 'rejected')}
-                      >REJECT</button>
-                      <button 
-                        className="px-3 py-1 rounded-md text-xs font-bold bg-transparent text-accent hover:bg-accent/10 border border-transparent hover:border-accent/30 transition-colors"
-                        onClick={() => handleResolve(app.id, 'approved')}
-                      >APPROVE</button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+          <div className="data-table-body">
+            {auditLogs.length === 0 ? (
+              <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>NO SECURITY EVENTS DETECTED</div>
+            ) : (
+              auditLogs.map((log) => (
+                <div key={log.id} className="data-row">
+                  <div className="col-md mono text-muted" style={{ fontSize: '0.7rem' }}>{new Date(log.timestamp * 1000).toLocaleTimeString()}</div>
+                  <div className="col-md mono text-blue" style={{ fontSize: '0.7rem' }}>{log.event_type.toUpperCase()}</div>
+                  <div className="col-lg mono" style={{ fontSize: '0.8rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.app_name || `PORT ${log.port}`}</div>
+                  <div className="col-sm mono" style={{ color: log.severity === 'critical' ? 'var(--accent-red)' : 'var(--accent-orange)', fontSize: '0.7rem' }}>{log.severity.toUpperCase()}</div>
+                  <div className="col-flex" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{log.message}</div>
+                </div>
+              ))
+            )}
           </div>
-        )}
-
+        </div>
       </section>
     </div>
   );

@@ -42,26 +42,26 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
   });
 
   const renderHeader = () => (
-    <div className="grid grid-cols-[80px_80px_1.5fr_2fr_100px_100px_100px_120px_150px] gap-4 items-center px-6 py-4 bg-secondary/50 border-b border-border-main text-xs font-bold text-text-muted uppercase tracking-widest sticky top-0 z-10">
-      <div>PORT</div>
-      <div>PROTO</div>
-      <div>APPLICATION & PID</div>
-      <div>REMOTE ENDPOINT</div>
-      <div className="text-right">IN</div>
-      <div className="text-right">OUT</div>
-      <div className="text-right">TOTAL</div>
-      <div className="text-center">RISK</div>
-      <div className="text-right">TREND</div>
+    <div className="port-table-header">
+      <div className="port-col-port">PORT</div>
+      <div className="port-col-proto">PROTO</div>
+      <div className="port-col-app">APPLICATION & PID</div>
+      <div className="port-col-endpoint">REMOTE ENDPOINT</div>
+      <div className="port-col-traffic">IN</div>
+      <div className="port-col-traffic">OUT</div>
+      <div className="port-col-traffic">TOTAL</div>
+      <div className="port-col-risk">RISK</div>
+      <div className="port-col-trend">TREND</div>
     </div>
   );
 
   if (filtered.length === 0) {
     return (
-      <div className="flex flex-col w-full h-full bg-surface border border-border-main rounded-xl shadow-lg overflow-hidden">
+      <div className="port-table-container">
         {renderHeader()}
-        <div className="flex flex-col items-center justify-center flex-1 py-20 text-center">
-          <div className="text-4xl mb-4 opacity-50">📡</div>
-          <div className="text-text-muted text-sm font-bold tracking-widest">
+        <div className="empty-state" style={{ padding: '80px 0' }}>
+          <div className="empty-state__icon">📡</div>
+          <div className="empty-state__text" style={{ fontSize: '1rem', fontWeight: 600 }}>
             {filter ? 'NO MATCHING PORTS FOUND' : 'AWAITING NETWORK TRAFFIC...'}
           </div>
         </div>
@@ -70,10 +70,10 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-surface border border-border-main rounded-xl shadow-lg overflow-hidden">
+    <div className="port-table-container">
       {renderHeader()}
 
-      <div ref={parentRef} className="flex-1 overflow-auto">
+      <div ref={parentRef} className="port-table-body">
         <div
           style={{
             height: `${virtualizer.getTotalSize()}px`,
@@ -90,7 +90,7 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
             return (
               <div
                 key={`${entry.protocol}-${entry.port}-${entry.pid}`}
-                className={`grid grid-cols-[80px_80px_1.5fr_2fr_100px_100px_100px_120px_150px] gap-4 items-center px-6 border-b border-border-main/50 hover:bg-hover transition-colors group ${isHighRisk ? 'bg-danger/5 hover:bg-danger/10' : ''}`}
+                className={`port-row ${isHighRisk ? 'port-row--high-risk' : ''}`}
                 style={{
                   position: 'absolute',
                   top: 0, left: 0, width: '100%',
@@ -98,44 +98,44 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
               >
-                <div className="font-mono text-sm font-bold text-text-main">{entry.port}</div>
-                <div className="font-mono text-xs text-primary bg-primary/10 px-2 py-1 rounded w-fit">{entry.protocol}</div>
+                <div className="port-col-port port-row__port">{entry.port}</div>
+                <div className="port-col-proto port-row__proto">{entry.protocol}</div>
                 
-                <div className="min-w-0 pr-4">
-                  <div className="font-bold text-sm text-text-main truncate" title={entry.app_name}>
+                <div className="port-col-app">
+                  <div className="port-row__app-name" title={entry.app_name}>
                     {entry.app_name}
                   </div>
-                  <div className="font-mono text-xs text-text-muted mt-0.5">
+                  <div className="port-row__pid-sub">
                     PID: {entry.pid}
                   </div>
                 </div>
 
-                <div className="min-w-0 pr-4">
-                  <div className="font-mono text-sm text-text-main truncate" title={entry.remote_ip}>
+                <div className="port-col-endpoint">
+                  <div className="port-row__ip" title={entry.remote_ip}>
                     {entry.remote_ip === "0.0.0.0" ? "—" : entry.remote_ip}
                   </div>
-                  <div className="text-xs text-text-muted mt-0.5 truncate" title={entry.org}>
+                  <div className="port-row__org-sub" title={entry.org}>
                     {entry.org !== "Unknown" ? entry.org : ""}
                   </div>
                 </div>
 
-                <div className="font-mono text-sm text-primary text-right">{formatKb(entry.kb_s_in)}</div>
-                <div className="font-mono text-sm text-warning text-right">{formatKb(entry.kb_s_out)}</div>
-                <div className="font-mono text-sm font-bold text-text-main text-right">
+                <div className="port-col-traffic port-row__bytes port-row__bytes--in">
+                  {formatKb(entry.kb_s_in)}
+                </div>
+                <div className="port-col-traffic port-row__bytes port-row__bytes--out">
+                  {formatKb(entry.kb_s_out)}
+                </div>
+                <div className="port-col-traffic port-row__bytes port-row__bytes--total">
                   {formatKb((entry.kb_s_in ?? 0) + (entry.kb_s_out ?? 0))}
                 </div>
 
-                <div className="text-center">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider ${
-                    risk >= 10 ? 'bg-danger/20 text-danger border border-danger/30' : 
-                    risk >= 5 ? 'bg-warning/20 text-warning border border-warning/30' : 
-                    'bg-accent/20 text-accent border border-accent/30'
-                  }`}>
+                <div className="port-col-risk" style={{ textAlign: 'center' }}>
+                  <span className={`risk-indicator risk-indicator--${risk >= 10 ? 'critical' : risk >= 5 ? 'warning' : 'safe'}`}>
                     {risk >= 10 ? 'CRITICAL' : risk >= 5 ? 'WARNING' : 'SECURE'}
                   </span>
                 </div>
 
-                <div className="h-8 w-full opacity-70 group-hover:opacity-100 transition-opacity">
+                <div className="port-col-trend">
                   <SparklineChart data={sparkline} />
                 </div>
               </div>
