@@ -17,8 +17,10 @@ export const apiService = {
    * Internal fetch wrapper with fallback logic.
    */
   _call: async (path: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem('vigilant_token') || 'default_insecure_secret';
     const headers: Record<string, string> = { 
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
       ...(options.headers as Record<string, string>)
     };
 

@@ -379,10 +379,15 @@ class InfluxDBWriter:
     def __init__(self, url=None, token=None, org=None, bucket=None):
         self.url = url or os.environ.get("INFLUXDB_URL", "http://localhost:8086")
         self.token = token or os.environ.get("INFLUXDB_TOKEN", "")
-        self.org = org or os.environ.get("INFLUXDB_ORG", "vigilant")
+        self.org = org or os.environ.get("INFLUXDB_ORG", "sentinel")
         self.bucket = bucket or os.environ.get("INFLUXDB_BUCKET", "traffic")
         self._client = None
         self._write_api = None
+
+        # When running on the host (not inside Docker), the container hostname
+        # 'influxdb' is unreachable. Fall back to localhost automatically.
+        if "://influxdb:" in self.url and not os.path.exists("/.dockerenv"):
+            self.url = self.url.replace("://influxdb:", "://localhost:")
 
     def connect(self) -> bool:
         if not self.token:

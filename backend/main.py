@@ -465,13 +465,13 @@ register_middleware(app)
 from backend.api.routes.ports import router as ports_router
 from backend.api.routes.control import router as control_router
 from backend.api.routes.approvals import router as approvals_router
-
+from backend.api.routes.auth import router as auth_router
 from backend.api.routes.system import router as system_router
 
 app.include_router(ports_router)
 app.include_router(control_router)
 app.include_router(approvals_router)
-
+app.include_router(auth_router)
 app.include_router(system_router)
 
 # --- Static Frontend Serving ---

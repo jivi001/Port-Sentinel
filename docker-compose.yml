@@ -108,10 +108,13 @@ services:
       - GF_SECURITY_COOKIE_SAMESITE=${GF_SECURITY_COOKIE_SAMESITE:-lax}
       - GF_SECURITY_DISABLE_GRAVATAR=true
       - GF_LOG_MODE=console
+      - INFLUXDB_ORG=${INFLUXDB_ORG:-sentinel}
+      - INFLUXDB_BUCKET=${INFLUXDB_BUCKET:-traffic}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/dashboards:/etc/grafana/dashboards
     depends_on:
       - influxdb
     restart: unless-stopped

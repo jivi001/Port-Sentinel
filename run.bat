@@ -76,9 +76,12 @@ echo Grafana Observability at: http://localhost:3000
 echo.
 
 echo Starting observability stack (Grafana/InfluxDB)...
-docker-compose up -d influxdb grafana 2>nul
+if not exist ".env" (
+    echo [!] Warning: .env file not found. Docker Compose will fail if required variables are missing.
+)
+docker-compose up -d influxdb grafana
 if errorlevel 1 (
-    echo [!] Warning: docker-compose not found or engine not running. Telemetry won't be saved.
+    echo [!] Warning: docker-compose failed. Check the error above. Telemetry won't be saved.
 )
 
 REM Start backend in a separate terminal so we can see its logs

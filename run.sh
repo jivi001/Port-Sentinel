@@ -18,6 +18,16 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 # --- Environment Setup ---
+if [ -d ".venv" ]; then
+    echo "Found .venv. Checking if path is valid..."
+    if [ -f ".venv/pyvenv.cfg" ]; then
+        if ! grep -F -q "$SCRIPT_DIR" ".venv/pyvenv.cfg"; then
+            echo "[!] PATH MISMATCH: .venv is from another folder. Deleting for repair..."
+            rm -rf .venv
+        fi
+    fi
+fi
+
 if [ ! -d ".venv" ]; then
     echo "Creating Python virtual environment..."
     python3 -m venv .venv
@@ -55,14 +65,17 @@ trap cleanup EXIT INT TERM
 echo ""
 if command -v docker-compose >/dev/null 2>&1; then
     echo "Starting observability stack (Grafana/InfluxDB)..."
-    docker-compose up -d influxdb grafana || echo "Warning: docker-compose failed."
+    if [ ! -f ".env" ]; then
+        echo "[!] Warning: .env file not found. Docker Compose will fail if required variables are missing."
+    fi
+    docker-compose up -d influxdb grafana || echo "[!] Warning: docker-compose failed. Telemetry won't be saved."
 else
     echo "Warning: docker-compose not found. Telemetry won't be saved."
 fi
 
 echo ""
 echo "Starting backend at http://localhost:8600 ..."
-python -m backend.main &
+VIGILANT_ENV=development python -m backend.main &
 BACKEND_PID=$!
 
 echo "Starting frontend at http://localhost:5173 ..."
