@@ -62,19 +62,28 @@ class SentinelWatchdog:
     def _restart_sentinel(self, new_count: int):
         """Launch a new instance of the sentinel backend."""
         try:
-            # Re-run the current entry point
-            executable = sys.executable
+            # Re-run the current entry point with realpath to prevent spoofing
+            executable = os.path.realpath(sys.executable)
             args = [executable, "-m", "backend.main"]
-            env = os.environ.copy()
-            env["SENTINEL_RESTARTS"] = str(new_count)
+            
+            # Use explicit allowlist for environment to prevent privilege escalation
+            safe_keys = {
+                "PATH", "PYTHONPATH", "HOST", "PORT", "DATABASE_URL", 
+                "VIGILANT_JWT_SECRET", "VIGILANT_CORS_ORIGINS", 
+                "INFLUXDB_URL", "INFLUXDB_TOKEN", "INFLUXDB_ORG", "INFLUXDB_BUCKET",
+                "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"
+            }
+            
+            safe_env = {k: os.environ[k] for k in safe_keys if k in os.environ}
+            safe_env["SENTINEL_RESTARTS"] = str(new_count)
             
             # Start in new session to decouple from the dying process
             if os.name == 'nt':
                 # Windows: DETACHED_PROCESS to survive parent termination
-                subprocess.Popen(args, env=env, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS)
+                subprocess.Popen(args, env=safe_env, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS)
             else:
                 # Unix: start_new_session
-                subprocess.Popen(args, env=env, start_new_session=True)
+                subprocess.Popen(args, env=safe_env, start_new_session=True)
                 
             logger.info("Sentinel backend restart signal sent.")
         except Exception as e:

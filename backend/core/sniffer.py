@@ -40,8 +40,10 @@ logger = logging.getLogger("sentinel.sniffer")
 # --- Constants ---
 MAX_PORTS = 65536
 ENTRY_SIZE = 64  # 32 bytes data + 32 bytes HMAC
+BITMAP_SIZE = 8192  # 65536 bits / 8
+BITMAP_OFFSET = MAX_PORTS * ENTRY_SIZE
 SHM_NAME = "sentinel_traffic_shm"  # Fallback
-SHM_SIZE = MAX_PORTS * ENTRY_SIZE
+SHM_SIZE = BITMAP_OFFSET + BITMAP_SIZE
 CAPTURE_INTERVAL = 0.1  # 100ms = 10Hz
 
 # Struct format for a single port entry
@@ -76,11 +78,10 @@ class SnifferProcess(multiprocessing.Process):
     Writes byte counters into shared memory that the Dispatcher reads.
     """
 
-    def __init__(self, interface: Optional[str] = None, 
+    def __init__(self, hmac_key: bytes, interface: Optional[str] = None, 
                  stop_event: Optional[multiprocessing.Event] = None,
                  lock: Optional[multiprocessing.Lock] = None,
-                 shm_name: str = "sentinel_traffic_shm",
-                 hmac_key: bytes = b""):
+                 shm_name: str = "sentinel_traffic_shm"):
         super().__init__(daemon=True)
         self.interface = interface
         self.stop_event = stop_event or multiprocessing.Event()
@@ -131,6 +132,12 @@ class SnifferProcess(multiprocessing.Process):
         data = PORT_ENTRY_STRUCT.pack(port, bytes_in, bytes_out, pid, protocol, active, risk_score, ip_bytes)
         mac = hmac.new(self.hmac_key, data, hashlib.sha256).digest()
         self._shm.buf[offset:offset + ENTRY_SIZE] = data + mac
+        
+        # Update active port bitmap
+        if active:
+            self._shm.buf[BITMAP_OFFSET + (port // 8)] |= (1 << (port % 8))
+        else:
+            self._shm.buf[BITMAP_OFFSET + (port // 8)] &= ~(1 << (port % 8))
 
     def packet_callback(self, packet) -> None:
         """
@@ -332,14 +339,17 @@ def read_all_active_ports(shm: shared_memory.SharedMemory, hmac_key: bytes, lock
 
     def _scan():
         buf = shm.buf
-        for port in range(MAX_PORTS):
-            # Fast path: active flag is byte 23 within each 64-byte entry
-            if buf[port * ENTRY_SIZE + 23] == 0:
+        # O(1) active port retrieval via bitmap (8192 bytes instead of 4MB scan)
+        for i in range(BITMAP_SIZE):
+            b = buf[BITMAP_OFFSET + i]
+            if b == 0:
                 continue
-            # Unpack and verify HMAC
-            entry = read_port_entry(shm, port, hmac_key)
-            if entry is not None:
-                active.append(entry)
+            for bit in range(8):
+                if b & (1 << bit):
+                    port = i * 8 + bit
+                    entry = read_port_entry(shm, port, hmac_key)
+                    if entry is not None:
+                        active.append(entry)
 
     if lock:
         with lock:

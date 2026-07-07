@@ -10,6 +10,7 @@ Security:
 import os
 import secrets
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -19,7 +20,8 @@ from passlib.context import CryptContext
 
 logger = logging.getLogger("vigilant.auth")
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
 def _resolve_jwt_secret() -> str:
@@ -31,13 +33,14 @@ def _resolve_jwt_secret() -> str:
     if secret and secret != "CHANGE_ME_BEFORE_DEPLOY":
         return secret
 
-    # Generate a persistent secret and warn
-    generated = secrets.token_urlsafe(64)
-    logger.warning(
-        "JWT secret not configured! A random secret has been generated. "
-        "Set VIGILANT_JWT_SECRET for production deployments."
+    # Fail fast if secret is not configured
+    logger.critical(
+        "CRITICAL ERROR: VIGILANT_JWT_SECRET is not configured! "
+        "A secure secret must be provided to sign sessions. "
+        "Generate one using: openssl rand -hex 32"
     )
-    return generated
+    import sys
+    sys.exit(1)
 
 
 SECRET_KEY = _resolve_jwt_secret()
@@ -65,7 +68,22 @@ def create_access_token(
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire,
+        "jti": str(uuid.uuid4())
+    })
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(data: dict) -> str:
+    """Create a signed JWT refresh token."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode.update({
+        "exp": expire,
+        "jti": str(uuid.uuid4()),
+        "type": "refresh"
+    })
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 

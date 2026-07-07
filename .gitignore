@@ -50,3 +50,8 @@ sentinel_pf_rules.conf
 .claude/
 .claude-flow/
 .mcp.json
+
+# --- Graphify ---
+graphify-out/
+CLAUDE.md
+

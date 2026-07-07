@@ -27,9 +27,23 @@ export const apiService = {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // Extract CSRF token from cookies
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop()?.split(';').shift();
+      return undefined;
+    };
+    
+    const csrfToken = getCookie('csrf_token');
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+
     const requestInit: RequestInit = {
       ...options,
       headers,
+      credentials: 'include',
     };
 
     const primaryBase = IS_DEV ? DEV_BACKEND_URL : PROXY_BASE;

@@ -11,17 +11,17 @@ services:
       HOST: 0.0.0.0
       PORT: 8600
       # Require custom JWT secret for session signing
-      VIGILANT_JWT_SECRET: "CHANGE_ME_BEFORE_DEPLOY_SUPER_SECRET"
-      VIGILANT_CORS_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8600,http://127.0.0.1:8600,http://frontend:80"
+      VIGILANT_JWT_SECRET: ${VIGILANT_JWT_SECRET}
+      VIGILANT_CORS_ORIGINS: ${VIGILANT_CORS_ORIGINS:-"http://localhost:8080,http://127.0.0.1:8080,http://localhost:8600,http://127.0.0.1:8600,http://frontend:80"}
       
       # Database connection. Falls back to local SQLite if left empty
-      # DATABASE_URL: postgresql://vigilant_admin:strong_postgres_password_123@db:5432/vigilant
+      DATABASE_URL: ${DATABASE_URL:-""}
       
       # Optional InfluxDB integration for time-series logging
-      INFLUXDB_URL: http://influxdb:8086
-      INFLUXDB_TOKEN: your_token_here
-      INFLUXDB_ORG: sentinel
-      INFLUXDB_BUCKET: traffic
+      INFLUXDB_URL: ${INFLUXDB_URL:-"http://influxdb:8086"}
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN:-""}
+      INFLUXDB_ORG: ${INFLUXDB_ORG:-"sentinel"}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-"traffic"}
     volumes:
       - sentinel-data:/app/data
       - sentinel-logs:/app/logs
@@ -64,9 +64,9 @@ services:
     image: postgres:15-alpine
     container_name: sentinel-postgres
     environment:
-      POSTGRES_USER: vigilant_admin
-      POSTGRES_PASSWORD: strong_postgres_password_123
-      POSTGRES_DB: vigilant
+      POSTGRES_USER: ${POSTGRES_USER:-vigilant_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-vigilant}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -81,11 +81,11 @@ services:
       - "8086:8086"
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword123
-      - DOCKER_INFLUXDB_INIT_ORG=sentinel
-      - DOCKER_INFLUXDB_INIT_BUCKET=traffic
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=your_token_here
+      - DOCKER_INFLUXDB_INIT_USERNAME=${DOCKER_INFLUXDB_INIT_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${DOCKER_INFLUXDB_INIT_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_ORG:-sentinel}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_BUCKET:-traffic}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
     volumes:
       - influxdb-data:/var/lib/influxdb2
     restart: unless-stopped

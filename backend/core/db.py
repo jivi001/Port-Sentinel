@@ -20,6 +20,7 @@ from backend.core.models import (
     Base, TrafficHistory, ProcessMap, ConfigCache, BlockedPort,
     AuditLog, AnalystApproval, ApprovalStatus, ActionType,
     User, DashboardLayout, UserPreference,
+    FailedLoginAttempt, RevokedToken
 )
 
 logger = logging.getLogger("vigilant.db")
@@ -76,6 +77,15 @@ class SQLiteDB:
         pool_kwargs = {}
         if not self._is_sqlite:
             pool_kwargs = {"pool_size": 10, "max_overflow": 20, "pool_pre_ping": True}
+            
+            # Enforce SSL in production for Postgres
+            is_prod = os.environ.get("VIGILANT_ENV", "production").lower() == "production"
+            if is_prod:
+                if "?" in self.db_url:
+                    if "sslmode=" not in self.db_url:
+                        self.db_url += "&sslmode=require"
+                else:
+                    self.db_url += "?sslmode=require"
 
         self.engine = create_engine(
             self.db_url, connect_args=connect_args, **pool_kwargs,
@@ -382,6 +392,69 @@ class SQLiteDB:
                 .all()
             )
             return {p.key: p.value for p in prefs}
+
+    # --- Authentication Security ---
+
+    def record_failed_login(self, ip_address: str, max_attempts: int = 5, backoff_minutes: int = 15) -> bool:
+        """Record a failed login and return True if locked out."""
+        with self._write_lock:
+            with self.get_session() as session:
+                record = session.query(FailedLoginAttempt).filter(FailedLoginAttempt.ip_address == ip_address).first()
+                now = time.time()
+                
+                if record:
+                    if record.locked_until and now < record.locked_until:
+                        return True # Still locked
+                    
+                    if record.locked_until and now >= record.locked_until:
+                        # Lock expired, reset
+                        record.attempts = 1
+                        record.locked_until = None
+                    else:
+                        record.attempts += 1
+                        
+                    if record.attempts >= max_attempts:
+                        record.locked_until = now + (backoff_minutes * 60)
+                        
+                    record.last_attempt = now
+                else:
+                    record = FailedLoginAttempt(ip_address=ip_address, attempts=1, last_attempt=now)
+                    session.add(record)
+                
+                session.commit()
+                return record.locked_until is not None and now < record.locked_until
+
+    def reset_failed_login(self, ip_address: str) -> None:
+        with self._write_lock:
+            with self.get_session() as session:
+                session.query(FailedLoginAttempt).filter(FailedLoginAttempt.ip_address == ip_address).delete()
+                session.commit()
+
+    def is_ip_locked_out(self, ip_address: str) -> bool:
+        with self.get_session() as session:
+            record = session.query(FailedLoginAttempt).filter(FailedLoginAttempt.ip_address == ip_address).first()
+            if record and record.locked_until and time.time() < record.locked_until:
+                return True
+            return False
+
+    def revoke_token(self, jti: str, expires_at: float, reason: str = "", revoked_by: str = None) -> None:
+        with self._write_lock:
+            with self.get_session() as session:
+                token = RevokedToken(jti=jti, expires_at=expires_at, reason=reason, revoked_by=revoked_by)
+                session.merge(token)
+                session.commit()
+
+    def is_token_revoked(self, jti: str) -> bool:
+        with self.get_session() as session:
+            return session.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
+
+    def prune_revoked_tokens(self) -> int:
+        now = time.time()
+        with self._write_lock:
+            with self.get_session() as session:
+                deleted = session.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
+                session.commit()
+                return deleted
 
     # --- Analytics ---
 

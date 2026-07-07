@@ -177,7 +177,37 @@ sio = socketio.AsyncServer(
 
 @sio.event
 async def connect(sid, environ):
-    logger.info(f"Client connected: {sid}")
+    # Origin validation (CSRF protection)
+    origin = environ.get("HTTP_ORIGIN")
+    if origin and origin not in ALLOWED_ORIGINS:
+        logger.warning(f"Socket.IO rejected: Invalid origin {origin}")
+        return False
+
+    # Authenticate via HttpOnly cookie
+    cookie_header = environ.get("HTTP_COOKIE", "")
+    from http.cookies import SimpleCookie
+    cookie = SimpleCookie(cookie_header)
+    token = cookie.get("sentinel_session")
+    
+    if not token or not token.value:
+        logger.warning(f"Socket.IO rejected: Missing session cookie from {sid}")
+        return False
+        
+    from backend.core.auth import decode_access_token
+    payload = decode_access_token(token.value)
+    if not payload:
+        logger.warning(f"Socket.IO rejected: Invalid JWT from {sid}")
+        return False
+        
+    jti = payload.get("jti")
+    if jti:
+        from backend.core.db import get_database
+        db = get_database()
+        if db.is_token_revoked(jti):
+            logger.warning(f"Socket.IO rejected: Revoked token from {sid}")
+            return False
+
+    logger.info(f"Client connected: {sid} (User: {payload.get('sub')})")
     port_table = traffic_accumulator.get_port_table()
     packed = msgpack.packb(port_table, use_bin_type=True)
     await sio.emit("port_table", packed, room=sid)
@@ -371,15 +401,17 @@ def _seed_admin_user():
             if not admin_exists:
                 admin_pw = os.environ.get("VIGILANT_ADMIN_PASSWORD")
                 if not admin_pw:
-                    admin_pw = secrets.token_urlsafe(16)
-                    logger.warning(
-                        "\n" + "=" * 64 + "\n"
-                        f"  INITIAL ADMIN CREDENTIALS\n"
-                        f"  Username: admin\n"
-                        f"  Password: {admin_pw}\n"
-                        f"  Change this password immediately after first login!\n"
-                        + "=" * 64
-                    )
+                    # Check if running in explicitly defined dev mode
+                    is_dev = os.environ.get("VIGILANT_ENV", "production").lower() == "development"
+                    if is_dev:
+                        admin_pw = secrets.token_urlsafe(16)
+                        # Do NOT log the password even in dev.
+                        logger.warning("No VIGILANT_ADMIN_PASSWORD set. Generated random admin password in dev mode. Reset it via DB.")
+                    else:
+                        raise ValueError(
+                            "CRITICAL SECURITY ERROR: VIGILANT_ADMIN_PASSWORD must be explicitly set in production environments. "
+                            "Startup aborted to prevent unauthorized access."
+                        )
                 admin_user = User(
                     username="admin",
                     email="admin@vigilant.local",

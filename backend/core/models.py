@@ -6,6 +6,7 @@ All tables are auto-created on first startup via Base.metadata.create_all().
 
 import enum
 import datetime
+import time
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Text, Index, ForeignKey,
 )
@@ -89,7 +90,7 @@ class AnalystApproval(Base):
     __tablename__ = "analyst_approvals"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    created_at = Column(Float, nullable=False, default=lambda: datetime.datetime.now().timestamp())
+    created_at = Column(Float, nullable=False, default=time.time)
     action_type = Column(String, nullable=False)
     target_identifier = Column(String, nullable=False)
     reason = Column(String, nullable=False)
@@ -114,7 +115,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=False, default=RoleEnum.VIEWER.value)
     is_active = Column(Boolean, default=True)
-    created_at = Column(Float, nullable=False, default=lambda: datetime.datetime.now().timestamp())
+    created_at = Column(Float, nullable=False, default=time.time)
 
 
 class DashboardLayout(Base):
@@ -144,3 +145,22 @@ class UserPreference(Base):
     __table_args__ = (
         Index("ix_pref_user_key", "user_id", "key", unique=True),
     )
+
+
+class FailedLoginAttempt(Base):
+    __tablename__ = "failed_login_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ip_address = Column(String, index=True, nullable=False)
+    attempts = Column(Integer, nullable=False, default=1)
+    last_attempt = Column(Float, nullable=False, default=time.time)
+    locked_until = Column(Float, nullable=True)
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    jti = Column(String, primary_key=True, index=True)
+    expires_at = Column(Float, nullable=False)
+    reason = Column(String, default="")
+    revoked_by = Column(String, nullable=True)
