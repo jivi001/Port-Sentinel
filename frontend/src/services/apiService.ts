@@ -66,13 +66,6 @@ export const apiService = {
   getHealth: async (): Promise<HealthResponse> => apiService._call('/health'),
   getBlockedPorts: async (): Promise<BlockedPort[]> => apiService._call('/blocked'),
   getPorts: async (): Promise<PortTable> => apiService._call('/ports'),
-  getPortHistory: async (port: number, hours: number = 24): Promise<any[]> => 
-    apiService._call(`/ports/${port}/history?hours=${hours}`),
-  getAuditLogs: async (limit: number = 100): Promise<any[]> => 
-    apiService._call(`/audit/logs?limit=${limit}`),
-  getTopTalkers: async (hours: number = 24, limit: number = 10): Promise<any[]> => 
-    apiService._call(`/analytics/top-talkers?hours=${hours}&limit=${limit}`),
-
 
   blockPort: async (port: number, protocol: string = 'TCP'): Promise<boolean> => {
     const res = await apiService._call(`/control/block/${port}?protocol=${protocol}`, { method: 'POST' });

@@ -297,7 +297,6 @@ async def dispatcher_loop_async():
 
             if now - last_db_flush >= DB_FLUSH_INTERVAL and pending_db_records:
                 try:
-                    db.insert_traffic(pending_db_records)
                     influx.write_traffic(pending_db_records)
                     pending_db_records.clear()
                     last_db_flush = now
@@ -316,7 +315,6 @@ async def dispatcher_loop_async():
 
             if now - last_evict >= EVICT_INTERVAL:
                 traffic_accumulator.cleanup()
-                db.prune_old_traffic(max_age_hours=24)
                 last_evict = now
 
             await asyncio.sleep(EMIT_INTERVAL)

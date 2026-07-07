@@ -72,10 +72,17 @@ if not exist "frontend\node_modules" (
 echo.
 echo [4/4] Starting Services...
 echo Dashboard will be at: http://localhost:5173
+echo Grafana Observability at: http://localhost:3000
 echo.
 
+echo Starting observability stack (Grafana/InfluxDB)...
+docker-compose up -d influxdb grafana 2>nul
+if errorlevel 1 (
+    echo [!] Warning: docker-compose not found or engine not running. Telemetry won't be saved.
+)
+
 REM Start backend in a separate terminal so we can see its logs
-start "Vigilant_Backend" cmd /k "set VIGILANT_ENV=development&& set VIGILANT_JWT_SECRET=dev_secret_do_not_use_in_prod&& .venv\Scripts\python.exe -m backend.main"
+start "Vigilant_Backend" cmd /k "set VIGILANT_ENV=development&& .venv\Scripts\python.exe -m backend.main"
 
 REM Start frontend in this terminal
 pushd frontend

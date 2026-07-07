@@ -133,9 +133,10 @@ echo.
 echo   Output: dist\Vigilant.exe
 echo.
 echo   To run:
-echo     1. Right-click dist\Vigilant.exe
-echo     2. Select "Run as administrator"
-echo     3. Browser will open automatically
+echo     1. Ensure docker-compose is running (for InfluxDB/Grafana)
+echo     2. Right-click dist\Vigilant.exe
+echo     3. Select "Run as administrator"
+echo     4. Browser will open automatically
 echo.
 echo   NOTE: Npcap must be installed on the
 echo   target machine for full packet capture.

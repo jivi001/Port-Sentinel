@@ -53,6 +53,14 @@ trap cleanup EXIT INT TERM
 
 # --- Start Services ---
 echo ""
+if command -v docker-compose >/dev/null 2>&1; then
+    echo "Starting observability stack (Grafana/InfluxDB)..."
+    docker-compose up -d influxdb grafana || echo "Warning: docker-compose failed."
+else
+    echo "Warning: docker-compose not found. Telemetry won't be saved."
+fi
+
+echo ""
 echo "Starting backend at http://localhost:8600 ..."
 python -m backend.main &
 BACKEND_PID=$!
@@ -60,6 +68,8 @@ BACKEND_PID=$!
 echo "Starting frontend at http://localhost:5173 ..."
 (cd frontend && npm run dev) &
 FRONTEND_PID=$!
+
+echo "Grafana Observability at http://localhost:3000 ..."
 
 echo ""
 echo "Press Ctrl+C to stop both services."

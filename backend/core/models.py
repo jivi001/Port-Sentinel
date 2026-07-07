@@ -15,25 +15,6 @@ from sqlalchemy.orm import declarative_base
 Base = declarative_base()
 
 
-class TrafficHistory(Base):
-    __tablename__ = "traffic_history"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    timestamp = Column(Float, nullable=False, index=True)
-    port = Column(Integer, nullable=False, index=True)
-    pid = Column(Integer, nullable=False)
-    app_name = Column(String, nullable=False, default="Unknown")
-    kb_s_in = Column(Float, nullable=False, default=0.0)
-    kb_s_out = Column(Float, nullable=False, default=0.0)
-    protocol = Column(String, nullable=False, default="TCP")
-    direction = Column(String, nullable=False, default="both")
-    risk_score = Column(Integer, default=0)
-
-    __table_args__ = (
-        Index("ix_traffic_port_timestamp", "port", "timestamp"),
-    )
-
-
 class ProcessMap(Base):
     __tablename__ = "process_map"
 
@@ -98,20 +79,6 @@ class AnalystApproval(Base):
     risk_score = Column(Integer, default=0)
     resolved_at = Column(Float, nullable=True)
     resolved_by = Column(String, nullable=True)
-
-
-class DashboardLayout(Base):
-    """Persisted dashboard widget layouts."""
-    __tablename__ = "dashboard_layouts"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String, nullable=False, default="default")
-    layout_json = Column(Text, nullable=False)
-    updated_at = Column(Float, nullable=False)
-
-    __table_args__ = (
-        Index("ix_dashboard_name", "name", unique=True),
-    )
 
 
 class UserPreference(Base):

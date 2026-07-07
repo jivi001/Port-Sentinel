@@ -44,13 +44,15 @@ graph TD
         POL[Policy Engine]
         THREAT[Threat Intel cache]
         DB[(SQLite / PostgreSQL)]
+        INFLUX[(InfluxDB)]
         OS[OS Firewall & Process Adapters]
     end
 
-    subgraph Presentation Layer [Vigilant UI & Clients]
+    subgraph Presentation Layer [Vigilant UI & Analytics]
         API[RESTful API & Gateway]
         WS[Socket.IO Gateway]
-        UI[React Enterprise Panel]
+        UI[React Process Control UI]
+        GRAF[Grafana Dashboard]
     end
 
     NIC -->|Raw Packets| SCAPY
@@ -65,11 +67,13 @@ graph TD
     POL -->|Create Approval Request| DB
     
     MET --> DB
-    MET -->|MsgPack Payload| WS
+    MET --> INFLUX
+    MET -->|Process Map Payload| WS
     API <--> OS
     
     WS --> UI
     UI <-->|REST Controls & Approvals| API
+    INFLUX --> GRAF
 ```
 
 ### Key Architectural Decisions
@@ -84,6 +88,7 @@ graph TD
 ### Core Platform
 - **Backend:** Python 3.12+, FastAPI, Uvicorn, SQLAlchemy ORM
 - **Frontend:** React 18, TypeScript, Vite, Vanilla CSS
+- **Observability:** Grafana 10+, InfluxDB 2.7
 - **IPC:** multiprocessing.shared_memory, msgpack-python, @msgpack/msgpack
 - **Packet Sniffing:** Scapy (low-level network captures)
 - **Database:** SQLite (WAL mode) / PostgreSQL (via SQLAlchemy dialect auto-detection)

@@ -17,9 +17,9 @@ from sqlalchemy import create_engine, func, event
 from sqlalchemy.orm import sessionmaker, Session
 
 from backend.core.models import (
-    Base, TrafficHistory, ProcessMap, ConfigCache, BlockedPort,
+    Base, ProcessMap, ConfigCache, BlockedPort,
     AuditLog, AnalystApproval, ApprovalStatus, ActionType,
-    DashboardLayout, UserPreference
+    UserPreference
 )
 
 logger = logging.getLogger("vigilant.db")
@@ -125,62 +125,6 @@ class SQLiteDB:
         if self.SessionLocal is None:
             self.connect()
         return self.SessionLocal()
-
-    # --- Traffic History ---
-
-    def insert_traffic(self, records: List[Dict[str, Any]]) -> None:
-        if not records:
-            return
-        traffic_objs = [
-            TrafficHistory(
-                timestamp=float(r.get("timestamp", time.time())),
-                port=int(r.get("port", 0)),
-                pid=int(r.get("pid", 0)),
-                app_name=str(r.get("app_name", "Unknown")),
-                kb_s_in=float(r.get("kb_s_in", 0.0)),
-                kb_s_out=float(r.get("kb_s_out", 0.0)),
-                protocol=str(r.get("protocol", "TCP")),
-                direction=str(r.get("direction", "both")),
-                risk_score=int(r.get("risk_score", 0)),
-            )
-            for r in records
-        ]
-        with self._write_lock:
-            with self.get_session() as session:
-                session.bulk_save_objects(traffic_objs)
-                session.commit()
-
-    def get_traffic_history(self, port: int, hours: int = 24) -> List[dict]:
-        cutoff = time.time() - (hours * 3600)
-        with self.get_session() as session:
-            records = (
-                session.query(TrafficHistory)
-                .filter(TrafficHistory.port == port, TrafficHistory.timestamp >= cutoff)
-                .order_by(TrafficHistory.timestamp)
-                .all()
-            )
-            return [
-                {
-                    "id": r.id, "timestamp": r.timestamp, "port": r.port,
-                    "pid": r.pid, "app_name": r.app_name,
-                    "kb_s_in": r.kb_s_in, "kb_s_out": r.kb_s_out,
-                    "protocol": r.protocol, "direction": r.direction,
-                    "risk_score": r.risk_score,
-                }
-                for r in records
-            ]
-
-    def prune_old_traffic(self, max_age_hours: int = 24) -> int:
-        cutoff = time.time() - (max_age_hours * 3600)
-        with self._write_lock:
-            with self.get_session() as session:
-                deleted = (
-                    session.query(TrafficHistory)
-                    .filter(TrafficHistory.timestamp < cutoff)
-                    .delete()
-                )
-                session.commit()
-                return deleted
 
     # --- Process Map ---
 
