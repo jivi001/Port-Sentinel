@@ -6,7 +6,7 @@
 
 import React, { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { PortTable as PortTableType, SparklinePoint } from '../types';
+import type { PortTable as PortTableType } from '../types';
 interface PortTableProps {
   data: PortTableType;
   filter: string;
