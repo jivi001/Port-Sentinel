@@ -5,8 +5,8 @@
  * and provides a live PortTable state.
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useEffect, useState, useCallback } from 'react';
+import { io } from 'socket.io-client';
 import { decode } from '@msgpack/msgpack';
 import { z } from 'zod';
 import type { PortTable } from '../types';
@@ -31,7 +31,6 @@ const PortEntrySchema = z.object({
 const PortTableSchema = z.array(PortEntrySchema);
 
 const SOCKET_URL = import.meta.env.DEV ? 'http://localhost:8600' : '/';
-const SPARKLINE_WINDOW = 60; // 60 seconds of history
 
 interface UseSocketReturn {
   portTable: PortTable;
@@ -55,7 +54,7 @@ export function useSocket(): UseSocketReturn {
       reconnectionAttempts: Infinity,
     });
 
-    socketRef.current = socket;
+
 
     socket.on('connect', () => {
       setConnected(true);

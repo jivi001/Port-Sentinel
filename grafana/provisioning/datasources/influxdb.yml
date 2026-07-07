@@ -2,6 +2,7 @@ apiVersion: 1
 
 datasources:
   - name: InfluxDB
+    uid: portsentinel-influx
     type: influxdb
     access: proxy
     url: http://influxdb:8086
@@ -11,4 +12,4 @@ datasources:
       organization: ${INFLUXDB_ORG:-sentinel}
       defaultBucket: ${INFLUXDB_BUCKET:-traffic}
     secureJsonData:
-      token: ${INFLUXDB_TOKEN:-my-super-secret-auth-token}
+      token: ${INFLUXDB_TOKEN}
