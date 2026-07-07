@@ -92,6 +92,27 @@ services:
     networks:
       - sentinel-network
 
+  # Grafana Dashboard (Primary Observability Platform)
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: sentinel-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      - influxdb
+    restart: unless-stopped
+    networks:
+      - sentinel-network
+
 networks:
   sentinel-network:
     driver: bridge
@@ -104,4 +125,6 @@ volumes:
   postgres-data:
     driver: local
   influxdb-data:
+    driver: local
+  grafana-data:
     driver: local

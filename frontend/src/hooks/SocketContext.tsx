@@ -9,18 +9,18 @@
 import React, { createContext, useContext } from 'react';
 import { useSocket } from './useSocket';
 
-import type { PortTable, SparklinePoint } from '../types';
+import type { PortTable } from '../types';
 
 interface SocketContextValue {
   portTable: PortTable;
-  sparklineData: Map<number, SparklinePoint[]>;
+
   connected: boolean;
   error: string | null;
 }
 
 const SocketContext = createContext<SocketContextValue>({
   portTable: [],
-  sparklineData: new Map(),
+
   connected: false,
   error: null,
 });

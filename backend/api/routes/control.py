@@ -29,7 +29,7 @@ async def block_port_endpoint(
     if protocol.upper() not in ("TCP", "UDP"):
         raise HTTPException(status_code=400, detail="Invalid protocol. Must be TCP or UDP.")
 
-    from backend.core.state import get_os_bridge
+    from backend.core.state import get_os_bridge, get_influx
     os_bridge = get_os_bridge()
     if not os_bridge:
         raise HTTPException(status_code=501, detail="Unsupported platform")
@@ -45,6 +45,9 @@ async def block_port_endpoint(
                 severity="critical",
                 details=f"Action: block, Target port: {port}, Protocol: {protocol}",
             )
+            influx = get_influx()
+            if influx:
+                influx.write_firewall_event(port, "block", protocol)
         return {"success": success, "port": port, "action": "block"}
     except FirewallRuleError as e:
         logger.error(f"Firewall block error for port {port}: {e}")
@@ -71,9 +74,12 @@ async def unblock_port_endpoint(
         db.insert_audit_log(
             event_type="manual_unblock",
             message=f"Unblocked port {port}",
-            severity="warning",
+            severity="info",
             details=f"Action: unblock, Target port: {port}",
         )
+        influx = get_influx()
+        if influx:
+            influx.write_firewall_event(port, "unblock", "TCP")
     return {"success": success, "port": port, "action": "unblock"}
 
 

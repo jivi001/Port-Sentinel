@@ -20,6 +20,7 @@ _traffic_accumulator: Any = None
 _policy_engine: Any = None
 _os_bridge: Any = None
 _sniffer_process: Any = None
+_influx: Any = None
 
 
 def init_state(
@@ -28,6 +29,7 @@ def init_state(
     policy_engine,
     os_bridge,
     sniffer_process=None,
+    influx=None,
 ) -> None:
     """Initialize global state references during application startup."""
     global _db, _traffic_accumulator, _policy_engine, _os_bridge, _sniffer_process
@@ -36,6 +38,7 @@ def init_state(
     _policy_engine = policy_engine
     _os_bridge = os_bridge
     _sniffer_process = sniffer_process
+    _influx = influx
 
 
 def set_sniffer_process(proc) -> None:
@@ -57,6 +60,10 @@ def get_policy_engine():
 def get_os_bridge():
     """Return the OS bridge adapter (or None if unsupported platform)."""
     return _os_bridge
+
+def get_influx():
+    """Return the InfluxDB instance."""
+    return _influx
 
 
 def get_sniffer_process():

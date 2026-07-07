@@ -7,17 +7,14 @@
 import React, { useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { PortTable as PortTableType, SparklinePoint } from '../types';
-import SparklineChart from './SparklineChart';
-
 interface PortTableProps {
   data: PortTableType;
-  sparklineData: Map<number, SparklinePoint[]>;
   filter: string;
 }
 
 const ROW_HEIGHT = 48; // Increased for better multi-line legibility
 
-const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) => {
+const PortTable: React.FC<PortTableProps> = ({ data, filter }) => {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
@@ -51,7 +48,7 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
       <div className="port-col-traffic">OUT</div>
       <div className="port-col-traffic">TOTAL</div>
       <div className="port-col-risk">RISK</div>
-      <div className="port-col-trend">TREND</div>
+
     </div>
   );
 
@@ -83,7 +80,6 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const entry = filtered[virtualRow.index];
-            const sparkline = sparklineData.get(entry.port) || [];
             const risk = entry.risk_score ?? 0;
             const isHighRisk = risk >= 7;
 
@@ -135,9 +131,7 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
                   </span>
                 </div>
 
-                <div className="port-col-trend">
-                  <SparklineChart data={sparkline} />
-                </div>
+
               </div>
             );
           })}

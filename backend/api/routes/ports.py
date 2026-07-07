@@ -23,11 +23,4 @@ async def get_ports():
     return accumulator.get_port_table()
 
 
-@router.get("/{port}/history")
-async def get_port_history(
-    port: int = FastAPIPath(..., ge=1, le=65535),
-    hours: int = Query(24, ge=1, le=720),
-):
-    """Historical traffic snapshots for a specific port."""
-    db = get_database()
-    return db.get_traffic_history(port, hours=hours)
+

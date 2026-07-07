@@ -138,6 +138,8 @@ def _policy_action_handler(action, target, app_name=None):
         if action == "block":
             os_bridge.block_port(target)
             db.add_blocked_port(target, block_type="hard", reason="Policy Engine Auto-Block")
+            if influx:
+                influx.write_firewall_event(target, "auto-block", "TCP")
             msg += f"Port {target}"
             severity = "critical"
         elif action == "request_approval":
@@ -164,6 +166,7 @@ init_state(
     traffic_accumulator=traffic_accumulator,
     policy_engine=policy_engine,
     os_bridge=os_bridge,
+    influx=influx,
 )
 
 # --- Socket.IO ---
@@ -225,6 +228,7 @@ async def dispatcher_loop_async():
     logger.info("Dispatcher task started")
     last_db_flush = time.time()
     last_evict = time.time()
+    last_sys_metrics = time.time()
     pending_db_records = []
     use_fallback = False
 
@@ -299,6 +303,16 @@ async def dispatcher_loop_async():
                     last_db_flush = now
                 except Exception as e:
                     logger.warning(f"DB flush error: {e}")
+
+            if now - last_sys_metrics >= 5.0:
+                try:
+                    cpu = psutil.cpu_percent()
+                    mem = psutil.virtual_memory().percent
+                    procs = len(psutil.pids())
+                    influx.write_system_metrics(cpu, mem, procs)
+                    last_sys_metrics = now
+                except Exception as e:
+                    logger.debug(f"Sys metrics error: {e}")
 
             if now - last_evict >= EVICT_INTERVAL:
                 traffic_accumulator.cleanup()
@@ -422,13 +436,13 @@ register_middleware(app)
 from backend.api.routes.ports import router as ports_router
 from backend.api.routes.control import router as control_router
 from backend.api.routes.approvals import router as approvals_router
-from backend.api.routes.analytics import router as analytics_router
+
 from backend.api.routes.system import router as system_router
 
 app.include_router(ports_router)
 app.include_router(control_router)
 app.include_router(approvals_router)
-app.include_router(analytics_router)
+
 app.include_router(system_router)
 
 # --- Static Frontend Serving ---

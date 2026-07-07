@@ -7,16 +7,16 @@ import { NavLink } from 'react-router-dom';
 import { useTheme } from '../hooks/ThemeContext';
 
 interface NavItem {
-  to: string;
+  to?: string;
+  href?: string;
   label: string;
   icon: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/',          label: 'DASHBOARD',       icon: '📊' },
-  { to: '/processes', label: 'PROCESSES',       icon: '⚙️' },
-  { to: '/history',   label: 'FORENSICS',       icon: '📈' },
-  { to: '/settings',  label: 'SETTINGS',        icon: '🔧' },
+  { href: 'http://localhost:3000', label: 'GRAFANA',     icon: '📊' },
+  { to: '/processes',              label: 'PROCESSES',   icon: '⚙️' },
+  { to: '/settings',               label: 'SETTINGS',    icon: '🔧' },
 ];
 
 const Sidebar: React.FC = () => {
@@ -36,17 +36,31 @@ const Sidebar: React.FC = () => {
 
       <nav className="sidebar__nav">
         {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) =>
-              `sidebar__link ${isActive ? 'sidebar__link--active' : ''}`
-            }
-          >
-            <span style={{ fontSize: '1.1rem', width: '24px', textAlign: 'center' }}>{item.icon}</span>
-            <span>{item.label}</span>
-          </NavLink>
+          item.href ? (
+            <a
+              key={item.label}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="sidebar__link"
+            >
+              <span style={{ fontSize: '1.1rem', width: '24px', textAlign: 'center' }}>{item.icon}</span>
+              <span>{item.label}</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.8rem', opacity: 0.5 }}>↗</span>
+            </a>
+          ) : (
+            <NavLink
+              key={item.to}
+              to={item.to!}
+              end={item.to === '/'}
+              className={({ isActive }) =>
+                `sidebar__link ${isActive ? 'sidebar__link--active' : ''}`
+              }
+            >
+              <span style={{ fontSize: '1.1rem', width: '24px', textAlign: 'center' }}>{item.icon}</span>
+              <span>{item.label}</span>
+            </NavLink>
+          )
         ))}
       </nav>
 

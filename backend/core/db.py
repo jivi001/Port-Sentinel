@@ -446,10 +446,15 @@ class InfluxDBWriter:
             return False
         try:
             from influxdb_client import InfluxDBClient
-            from influxdb_client.client.write_api import SYNCHRONOUS
+            from influxdb_client.client.write_api import WriteOptions
 
             self._client = InfluxDBClient(url=self.url, token=self.token, org=self.org)
-            self._write_api = self._client.write_api(write_options=SYNCHRONOUS)
+            self._write_api = self._client.write_api(write_options=WriteOptions(
+                batch_size=500,
+                flush_interval=5000,
+                jitter_interval=2000,
+                retry_interval=5000
+            ))
             logger.info(f"InfluxDB connected: {self.url}/{self.bucket}")
             return True
         except Exception as e:
@@ -477,6 +482,38 @@ class InfluxDBWriter:
             self._write_api.write(bucket=self.bucket, record=points)
         except Exception as e:
             logger.debug(f"InfluxDB write error: {e}")
+
+    def write_system_metrics(self, cpu_percent: float, mem_percent: float, process_count: int) -> None:
+        if self._write_api is None:
+            return
+        try:
+            from influxdb_client import Point
+            point = (
+                Point("system")
+                .tag("host", "local")
+                .field("cpu", float(cpu_percent))
+                .field("memory", float(mem_percent))
+                .field("processes", int(process_count))
+            )
+            self._write_api.write(bucket=self.bucket, record=point)
+        except Exception as e:
+            logger.debug(f"InfluxDB system write error: {e}")
+
+    def write_firewall_event(self, port: int, action: str, protocol: str) -> None:
+        if self._write_api is None:
+            return
+        try:
+            from influxdb_client import Point
+            point = (
+                Point("firewall")
+                .tag("port", str(port))
+                .tag("protocol", protocol)
+                .tag("action", action)
+                .field("count", 1)
+            )
+            self._write_api.write(bucket=self.bucket, record=point)
+        except Exception as e:
+            logger.debug(f"InfluxDB firewall write error: {e}")
 
     def close(self) -> None:
         if self._client:

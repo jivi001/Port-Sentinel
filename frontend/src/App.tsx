@@ -9,10 +9,9 @@ import React, { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { SocketProvider } from './hooks/SocketContext';
 import Sidebar from './components/Sidebar';
-import DashboardPage from './pages/DashboardPage';
+import { Navigate } from 'react-router-dom';
 
 const ProcessControlPage = lazy(() => import('./pages/ProcessControlPage'));
-const HistoricalLogsPage = lazy(() => import('./pages/HistoricalLogsPage'));
 
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
@@ -38,9 +37,8 @@ const App: React.FC = () => {
         <main className="main-content">
           <Suspense fallback={<RouteFallback />}>
             <Routes>
-              <Route path="/" element={<DashboardPage />} />
+              <Route path="/" element={<Navigate to="/processes" replace />} />
               <Route path="/processes" element={<ProcessControlPage />} />
-              <Route path="/history" element={<HistoricalLogsPage />} />
 
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={
