@@ -52,6 +52,9 @@ export function useSocket(): UseSocketReturn {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: Infinity,
+      auth: {
+        token: localStorage.getItem("vigilant_token") || "default_insecure_secret"
+      }
     });
 
 

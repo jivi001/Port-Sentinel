@@ -13,13 +13,15 @@ Endpoints:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+import asyncio
 from pydantic import BaseModel
 
-from backend.core.db import get_database
+from backend.core.db import SQLiteDB, get_database
+from backend.api.dependencies import get_current_user, get_db_session
 
 logger = logging.getLogger("vigilant.api.approvals")
 
-router = APIRouter(prefix="/api/approvals", tags=["Analyst Approvals"])
+router = APIRouter(prefix="/api/approvals", tags=["Analyst Approvals"], dependencies=[Depends(get_current_user)])
 
 
 class ApprovalResolveRequest(BaseModel):
@@ -32,15 +34,17 @@ async def request_approval_endpoint(
     pid: int = Query(...),
     app_name: str = Query(None),
     reason: str = Query("Manual request"),
+    db: SQLiteDB = Depends(get_database)
 ):
     """Submit a new analyst approval request for a detected threat action."""
-    db = get_database()
-    approval_id = db.create_analyst_approval(
+    approval_id = await asyncio.to_thread(
+        db.create_analyst_approval,
         action_type="suspend_process",
         target_identifier=str(pid),
         reason=reason,
     )
-    db.insert_audit_log(
+    await asyncio.to_thread(
+        db.insert_audit_log,
         event_type="approval_requested",
         message=f"Approval requested for PID {pid}",
         severity="info",
@@ -55,16 +59,16 @@ async def request_approval_endpoint(
 
 
 @router.get("")
-async def get_approvals():
+async def get_approvals(db: SQLiteDB = Depends(get_database)):
     """List all pending analyst approval requests, ordered by risk score."""
-    db = get_database()
-    return db.get_pending_approvals()
+    return await asyncio.to_thread(db.get_pending_approvals)
 
 
 @router.post("/{approval_id}/resolve")
 async def resolve_approval(
     approval_id: int,
     payload: ApprovalResolveRequest,
+    db: SQLiteDB = Depends(get_database)
 ):
     """Resolve a pending approval as approved or rejected."""
     if payload.status not in ("approved", "rejected"):
@@ -73,15 +77,16 @@ async def resolve_approval(
             detail="Status must be 'approved' or 'rejected'",
         )
 
-    db = get_database()
-    success = db.update_approval_status(
+    success = await asyncio.to_thread(
+        db.update_approval_status,
         approval_id, payload.status, "system"
     )
     if not success:
         raise HTTPException(status_code=404, detail="Approval not found")
 
     severity = "info" if payload.status == "approved" else "warning"
-    db.insert_audit_log(
+    await asyncio.to_thread(
+        db.insert_audit_log,
         event_type="approval_resolved",
         message=f"Approval {approval_id} {payload.status} by system",
         severity=severity,

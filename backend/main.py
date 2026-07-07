@@ -132,30 +132,38 @@ def _policy_action_handler(action, target, app_name=None):
     """Callback for PolicyEngine to execute OS-level actions and log them."""
     if not os_bridge:
         return
-    try:
-        msg = f"Automated {action} triggered on "
-        severity = "warning"
-        if action == "block":
-            os_bridge.block_port(target)
-            db.add_blocked_port(target, block_type="hard", reason="Policy Engine Auto-Block")
-            if influx:
-                influx.write_firewall_event(target, "auto-block", "TCP")
-            msg += f"Port {target}"
-            severity = "critical"
-        elif action == "request_approval":
-            msg += f"Analyst Approval requested for PID {target}"
-            db.create_analyst_approval(
-                action_type="suspend_process",
-                target_identifier=str(target),
-                reason="Policy trigger",
+    
+    def blocking_task():
+        try:
+            msg = f"Automated {action} triggered on "
+            severity = "warning"
+            if action == "block":
+                os_bridge.block_port(target)
+                db.add_blocked_port(target, block_type="hard", reason="Policy Engine Auto-Block")
+                if influx:
+                    influx.write_firewall_event(target, "auto-block", "TCP")
+                msg += f"Port {target}"
+                severity = "critical"
+            elif action == "request_approval":
+                msg += f"Analyst Approval requested for PID {target}"
+                db.create_analyst_approval(
+                    action_type="suspend_process",
+                    target_identifier=str(target),
+                    reason="Policy trigger",
+                )
+            db.insert_audit_log(
+                event_type="policy_trigger", message=msg,
+                app_name=app_name, severity=severity,
+                details=f"Action: {action}, Target: {target}",
             )
-        db.insert_audit_log(
-            event_type="policy_trigger", message=msg,
-            app_name=app_name, severity=severity,
-            details=f"Action: {action}, Target: {target}",
-        )
-    except Exception as e:
-        logger.error(f"Policy action {action} failed: {e}")
+        except Exception as e:
+            logger.error(f"Policy action {action} failed: {e}")
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, blocking_task)
+    except RuntimeError:
+        blocking_task()
 
 
 policy_engine = PolicyEngine(action_handler=_policy_action_handler)
@@ -179,12 +187,20 @@ sio = socketio.AsyncServer(
 
 
 @sio.event
-async def connect(sid, environ):
+async def connect(sid, environ, auth):
     # Origin validation (CSRF protection)
     origin = environ.get("HTTP_ORIGIN")
     if origin and origin not in ALLOWED_ORIGINS:
         logger.warning(f"Socket.IO rejected: Invalid origin {origin}")
         return False
+
+    # Token Validation
+    token = auth.get("token") if auth else None
+    secret = os.environ.get("VIGILANT_JWT_SECRET", "default_insecure_secret")
+    if not token or token != secret:
+        logger.warning(f"Socket.IO rejected: Invalid token for sid {sid}")
+        from socketio.exceptions import ConnectionRefusedError
+        raise ConnectionRefusedError("Authentication failed")
 
     logger.info(f"Client connected: {sid}")
     port_table = traffic_accumulator.get_port_table()
@@ -297,7 +313,9 @@ async def dispatcher_loop_async():
 
             if now - last_db_flush >= DB_FLUSH_INTERVAL and pending_db_records:
                 try:
-                    influx.write_traffic(pending_db_records)
+                    # Offload blocking HTTP call to a thread
+                    records_copy = list(pending_db_records)
+                    await asyncio.to_thread(influx.write_traffic, records_copy)
                     pending_db_records.clear()
                     last_db_flush = now
                 except Exception as e:
@@ -308,7 +326,20 @@ async def dispatcher_loop_async():
                     cpu = psutil.cpu_percent()
                     mem = psutil.virtual_memory().percent
                     procs = len(psutil.pids())
-                    influx.write_system_metrics(cpu, mem, procs)
+                    try:
+                        disk = psutil.disk_usage(os.path.abspath(os.sep)).percent
+                    except Exception:
+                        disk = 0.0
+                    try:
+                        conns = len(psutil.net_connections(kind='inet'))
+                    except Exception:
+                        conns = 0
+                    agent_health = 1
+                    # Offload blocking HTTP call to a thread
+                    await asyncio.to_thread(
+                        influx.write_system_metrics,
+                        cpu, mem, procs, disk, conns, agent_health
+                    )
                     last_sys_metrics = now
                 except Exception as e:
                     logger.debug(f"Sys metrics error: {e}")

@@ -427,7 +427,7 @@ class InfluxDBWriter:
         except Exception as e:
             logger.debug(f"InfluxDB write error: {e}")
 
-    def write_system_metrics(self, cpu_percent: float, mem_percent: float, process_count: int) -> None:
+    def write_system_metrics(self, cpu_percent: float, mem_percent: float, process_count: int, disk_percent: float = 0.0, connections: int = 0, agent_status: int = 1) -> None:
         if self._write_api is None:
             return
         try:
@@ -438,6 +438,9 @@ class InfluxDBWriter:
                 .field("cpu", float(cpu_percent))
                 .field("memory", float(mem_percent))
                 .field("processes", int(process_count))
+                .field("disk", float(disk_percent))
+                .field("active_connections", int(connections))
+                .field("agent_health", int(agent_status))
             )
             self._write_api.write(bucket=self.bucket, record=point)
         except Exception as e:

@@ -1,0 +1,106 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: System Alerts
+    folder: PortSentinel Alerts
+    interval: 1m
+    rules:
+      - uid: alert_high_cpu
+        title: High CPU Usage
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: portsentinel-influx
+            model:
+              query: 'from(bucket: "traffic") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r["_measurement"] == "system") |> filter(fn: (r) => r["_field"] == "cpu") |> aggregateWindow(every: 1m, fn: last, createEmpty: false) |> yield(name: "last")'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: $B > 90
+        noDataState: NoData
+        execErrState: Error
+      - uid: alert_high_mem
+        title: High Memory Usage
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: portsentinel-influx
+            model:
+              query: 'from(bucket: "traffic") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r["_measurement"] == "system") |> filter(fn: (r) => r["_field"] == "memory") |> aggregateWindow(every: 1m, fn: last, createEmpty: false) |> yield(name: "last")'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: $B > 90
+        noDataState: NoData
+        execErrState: Error
+      - uid: alert_high_disk
+        title: High Disk Usage
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: portsentinel-influx
+            model:
+              query: 'from(bucket: "traffic") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r["_measurement"] == "system") |> filter(fn: (r) => r["_field"] == "disk") |> aggregateWindow(every: 1m, fn: last, createEmpty: false) |> yield(name: "last")'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: $B > 95
+      - uid: alert_agent_offline
+        title: Agent Offline
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: portsentinel-influx
+            model:
+              query: 'from(bucket: "traffic") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r["_measurement"] == "system") |> filter(fn: (r) => r["_field"] == "agent_health") |> aggregateWindow(every: 1m, fn: last, createEmpty: false) |> yield(name: "last")'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: $B < 1
+      - uid: alert_high_threat
+        title: High Threat Score
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: portsentinel-influx
+            model:
+              query: 'from(bucket: "traffic") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r["_measurement"] == "traffic") |> filter(fn: (r) => r["_field"] == "risk_score") |> aggregateWindow(every: 1m, fn: max, createEmpty: false) |> yield(name: "max")'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: max
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: math
+              expression: $B > 70

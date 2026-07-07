@@ -13,8 +13,7 @@ import platform
 
 import psutil
 from fastapi import APIRouter, Depends
-
-
+from backend.api.dependencies import get_current_user, get_sniffer_process, get_traffic_accumulator, get_policy_engine
 
 router = APIRouter(prefix="/api", tags=["System"])
 
@@ -25,16 +24,13 @@ VERSION = "2.0.0"
 _start_time = time.time()
 
 
-@router.get("/info")
-async def system_info():
+@router.get("/info", dependencies=[Depends(get_current_user)])
+async def system_info(
+    sniffer_process = Depends(get_sniffer_process),
+    accumulator = Depends(get_traffic_accumulator),
+    policy_engine = Depends(get_policy_engine)
+):
     """Detailed system information dashboard."""
-    from backend.core.state import (
-        get_sniffer_process, get_traffic_accumulator, get_policy_engine,
-    )
-
-    sniffer_process = get_sniffer_process()
-    accumulator = get_traffic_accumulator()
-    policy_engine = get_policy_engine()
     p = psutil.Process(os.getpid())
 
     return {
@@ -67,12 +63,11 @@ async def system_info():
 
 
 @router.get("/health")
-async def health():
+async def health(
+    sniffer = Depends(get_sniffer_process),
+    accumulator = Depends(get_traffic_accumulator)
+):
     """Lightweight health check endpoint (unauthenticated)."""
-    from backend.core.state import get_sniffer_process, get_traffic_accumulator
-
-    sniffer = get_sniffer_process()
-    accumulator = get_traffic_accumulator()
 
     return {
         "status": "ok",
