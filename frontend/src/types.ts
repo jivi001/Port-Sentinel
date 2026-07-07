@@ -23,12 +23,7 @@ export interface PortEntry {
 /** Port table sent via Socket.io */
 export type PortTable = PortEntry[];
 
-/** Sparkline data point */
-export interface SparklinePoint {
-  t: number;       // timestamp
-  kbIn: number;
-  kbOut: number;
-}
+
 
 /** Control action types — no process termination */
 export type ControlAction = "request_approval" | "block" | "unblock";
@@ -84,36 +79,4 @@ export interface AuditLogEntry {
   details: string | null;
 }
 
-/** Geo threat data for globe visualization */
-export interface GeoThreatEntry {
-  ip: string;
-  port: number;
-  app_name: string;
-  country: string;
-  org: string;
-  risk_score: number;
-  kb_s_in: number;
-  kb_s_out: number;
-  protocol: string;
-  lat?: number;
-  lng?: number;
-}
 
-/** Country-level threat statistics */
-export interface CountryStats {
-  country: string;
-  connections: number;
-  total_risk: number;
-  total_kb_s: number;
-}
-
-/** Dashboard layout item */
-export interface LayoutItem {
-  i: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  minW?: number;
-  minH?: number;
-}

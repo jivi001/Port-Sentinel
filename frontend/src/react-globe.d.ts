@@ -1,4 +1,1 @@
-declare module 'react-globe.gl' {
-  const Globe: any;
-  export default Globe;
-}
+// DELETED - Legacy Code removed during Grafana Migration

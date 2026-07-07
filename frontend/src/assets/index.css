@@ -230,24 +230,10 @@ body {
 .port-row__bytes--in { color: var(--accent-blue); }
 .port-row__bytes--out { color: var(--accent-orange); }
 
-/* ---------- KPI & Dashboard Summary ---------- */
-.dashboard-summary { 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between; 
-  background: var(--bg-card); 
-  border: 1px solid var(--border-dim); 
-  border-radius: 12px; 
-  padding: 24px 32px;
-  flex-shrink: 0;
-}
-
-.dashboard-mini-stats { display: flex; gap: 64px; }
+/* ---------- KPI ---------- */
 .kpi { display: flex; flex-direction: column; }
 .kpi__label { font-size: 0.65rem; text-transform: uppercase; font-weight: 800; color: var(--text-muted); letter-spacing: 0.12em; }
 .kpi__value { font-size: 1.6rem; font-weight: 900; font-family: var(--font-mono); color: white; margin-top: 2px; }
-
-.dashboard-compact-chart { flex: 1; height: 60px; max-width: 500px; opacity: 0.8; }
 
 /* ---------- Sidebar Navigation ---------- */
 .sidebar {
