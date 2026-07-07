@@ -14,7 +14,7 @@ import platform
 import psutil
 from fastapi import APIRouter, Depends
 
-from backend.api.dependencies import require_auth
+
 
 router = APIRouter(prefix="/api", tags=["System"])
 
@@ -26,8 +26,8 @@ _start_time = time.time()
 
 
 @router.get("/info")
-async def system_info(_auth=Depends(require_auth)):
-    """Detailed system information dashboard. Requires authentication."""
+async def system_info():
+    """Detailed system information dashboard."""
     from backend.core.state import (
         get_sniffer_process, get_traffic_accumulator, get_policy_engine,
     )

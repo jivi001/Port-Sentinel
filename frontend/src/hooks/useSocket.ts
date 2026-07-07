@@ -89,7 +89,6 @@ export function useSocket(): UseSocketReturn {
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: Infinity,
-      withCredentials: true,
     });
 
     socketRef.current = socket;

@@ -122,53 +122,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
 
 
-# ---------------------------------------------------------------------------
-# CSRF Protection Middleware
-# ---------------------------------------------------------------------------
-
-class AntiCSRFMiddleware(BaseHTTPMiddleware):
-    """
-    Implements CSRF protection using a Double-Submit Cookie and Origin validation.
-    """
-    async def dispatch(self, request: Request, call_next):
-        method = request.method.upper()
-        if method in ("POST", "PUT", "DELETE", "PATCH"):
-            # Exclude login and health endpoints
-            path = request.url.path
-            if path not in ("/api/auth/login", "/api/health"):
-                # 1. Double-Submit Cookie Check
-                csrf_cookie = request.cookies.get("csrf_token")
-                csrf_header = request.headers.get("X-CSRF-Token")
-                
-                if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
-                    logger.warning(f"CSRF validation failed for {request.client.host if request.client else 'unknown'}")
-                    return Response(
-                        content='{"detail":"CSRF token missing or invalid"}',
-                        status_code=403,
-                        media_type="application/json"
-                    )
-                
-                # 2. Strict Origin/Referer Check (defense in depth)
-                origin = request.headers.get("Origin") or request.headers.get("Referer")
-                if origin:
-                    # Strip trailing slash from Referer for comparison
-                    origin = origin.rstrip("/")
-                    from backend.main import ALLOWED_ORIGINS
-                    if not any(origin.startswith(o) for o in ALLOWED_ORIGINS):
-                        logger.warning(f"CSRF Origin validation failed: {origin}")
-                        return Response(
-                            content='{"detail":"Invalid Origin"}',
-                            status_code=403,
-                            media_type="application/json"
-                        )
-                        
-        return await call_next(request)
-
 
 def register_middleware(app: FastAPI) -> None:
     """Register all middleware on the FastAPI application in correct order."""
     # Order matters: outermost middleware executes first
     app.add_middleware(SecurityHeadersMiddleware)
-    app.add_middleware(AntiCSRFMiddleware)
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(RateLimitMiddleware)

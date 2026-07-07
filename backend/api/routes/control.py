@@ -12,7 +12,6 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import Path as FastAPIPath
 
-from backend.api.dependencies import require_admin, require_auth
 from backend.core.db import get_database
 from backend.core.exceptions import FirewallRuleError
 
@@ -24,8 +23,7 @@ router = APIRouter(tags=["Firewall Control"])
 @router.post("/api/control/block/{port}")
 async def block_port_endpoint(
     port: int = FastAPIPath(..., ge=1, le=65535),
-    protocol: str = Query("TCP"),
-    _auth=Depends(require_admin),
+    protocol: str = Query("TCP")
 ):
     """Add OS firewall rules to block inbound/outbound traffic on a port."""
     if protocol.upper() not in ("TCP", "UDP"):
@@ -59,7 +57,6 @@ async def block_port_endpoint(
 @router.post("/api/control/unblock/{port}")
 async def unblock_port_endpoint(
     port: int = FastAPIPath(..., ge=1, le=65535),
-    _auth=Depends(require_admin),
 ):
     """Remove Vigilant firewall rules for a specific port."""
     from backend.core.state import get_os_bridge
@@ -81,7 +78,7 @@ async def unblock_port_endpoint(
 
 
 @router.get("/api/blocked")
-async def get_blocked_ports(_auth=Depends(require_auth)):
+async def get_blocked_ports():
     """List all currently blocked ports."""
     db = get_database()
     return db.get_blocked_ports()

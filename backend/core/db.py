@@ -19,8 +19,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from backend.core.models import (
     Base, TrafficHistory, ProcessMap, ConfigCache, BlockedPort,
     AuditLog, AnalystApproval, ApprovalStatus, ActionType,
-    User, DashboardLayout, UserPreference,
-    FailedLoginAttempt, RevokedToken
+    DashboardLayout, UserPreference
 )
 
 logger = logging.getLogger("vigilant.db")
@@ -358,103 +357,36 @@ class SQLiteDB:
                     session.add(layout)
                 session.commit()
 
-    def get_dashboard_layout(self, user_id: int, name: str = "default") -> Optional[str]:
+    def get_dashboard_layout(self, name: str = "default") -> Optional[str]:
         with self.get_session() as session:
             layout = (
                 session.query(DashboardLayout)
-                .filter(DashboardLayout.user_id == user_id, DashboardLayout.name == name)
+                .filter(DashboardLayout.name == name)
                 .first()
             )
             return layout.layout_json if layout else None
 
     # --- User Preferences ---
 
-    def set_user_preference(self, user_id: int, key: str, value: str) -> None:
+    def set_user_preference(self, key: str, value: str) -> None:
         with self._write_lock:
             with self.get_session() as session:
                 pref = (
                     session.query(UserPreference)
-                    .filter(UserPreference.user_id == user_id, UserPreference.key == key)
+                    .filter(UserPreference.key == key)
                     .first()
                 )
                 if pref:
                     pref.value = value
                 else:
-                    pref = UserPreference(user_id=user_id, key=key, value=value)
+                    pref = UserPreference(key=key, value=value)
                     session.add(pref)
                 session.commit()
 
-    def get_user_preferences(self, user_id: int) -> Dict[str, str]:
+    def get_user_preferences(self) -> Dict[str, str]:
         with self.get_session() as session:
-            prefs = (
-                session.query(UserPreference)
-                .filter(UserPreference.user_id == user_id)
-                .all()
-            )
+            prefs = session.query(UserPreference).all()
             return {p.key: p.value for p in prefs}
-
-    # --- Authentication Security ---
-
-    def record_failed_login(self, ip_address: str, max_attempts: int = 5, backoff_minutes: int = 15) -> bool:
-        """Record a failed login and return True if locked out."""
-        with self._write_lock:
-            with self.get_session() as session:
-                record = session.query(FailedLoginAttempt).filter(FailedLoginAttempt.ip_address == ip_address).first()
-                now = time.time()
-                
-                if record:
-                    if record.locked_until and now < record.locked_until:
-                        return True # Still locked
-                    
-                    if record.locked_until and now >= record.locked_until:
-                        # Lock expired, reset
-                        record.attempts = 1
-                        record.locked_until = None
-                    else:
-                        record.attempts += 1
-                        
-                    if record.attempts >= max_attempts:
-                        record.locked_until = now + (backoff_minutes * 60)
-                        
-                    record.last_attempt = now
-                else:
-                    record = FailedLoginAttempt(ip_address=ip_address, attempts=1, last_attempt=now)
-                    session.add(record)
-                
-                session.commit()
-                return record.locked_until is not None and now < record.locked_until
-
-    def reset_failed_login(self, ip_address: str) -> None:
-        with self._write_lock:
-            with self.get_session() as session:
-                session.query(FailedLoginAttempt).filter(FailedLoginAttempt.ip_address == ip_address).delete()
-                session.commit()
-
-    def is_ip_locked_out(self, ip_address: str) -> bool:
-        with self.get_session() as session:
-            record = session.query(FailedLoginAttempt).filter(FailedLoginAttempt.ip_address == ip_address).first()
-            if record and record.locked_until and time.time() < record.locked_until:
-                return True
-            return False
-
-    def revoke_token(self, jti: str, expires_at: float, reason: str = "", revoked_by: str = None) -> None:
-        with self._write_lock:
-            with self.get_session() as session:
-                token = RevokedToken(jti=jti, expires_at=expires_at, reason=reason, revoked_by=revoked_by)
-                session.merge(token)
-                session.commit()
-
-    def is_token_revoked(self, jti: str) -> bool:
-        with self.get_session() as session:
-            return session.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
-
-    def prune_revoked_tokens(self) -> int:
-        now = time.time()
-        with self._write_lock:
-            with self.get_session() as session:
-                deleted = session.query(RevokedToken).filter(RevokedToken.expires_at < now).delete()
-                session.commit()
-                return deleted
 
     # --- Analytics ---
 

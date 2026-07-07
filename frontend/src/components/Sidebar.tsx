@@ -16,7 +16,6 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/',          label: 'DASHBOARD',       icon: '📊' },
   { to: '/processes', label: 'PROCESSES',       icon: '⚙️' },
   { to: '/history',   label: 'FORENSICS',       icon: '📈' },
-  { to: '/network',   label: 'GLOBAL THREAT',    icon: '🌐' },
   { to: '/settings',  label: 'SETTINGS',        icon: '🔧' },
 ];
 

@@ -13,7 +13,6 @@ import logging
 
 from fastapi import APIRouter, Depends, Query
 
-from backend.api.dependencies import require_auth
 from backend.core.db import get_database
 
 logger = logging.getLogger("vigilant.api.analytics")
@@ -25,7 +24,6 @@ router = APIRouter(tags=["Analytics & Forensics"])
 async def get_top_talkers(
     hours: int = Query(24, ge=1, le=720),
     limit: int = Query(10, ge=1, le=1000),
-    _auth=Depends(require_auth),
 ):
     """Identify applications with the highest traffic volume."""
     db = get_database()
@@ -35,7 +33,6 @@ async def get_top_talkers(
 @router.get("/api/audit/logs")
 async def get_audit_logs(
     limit: int = Query(100, ge=1, le=1000),
-    _auth=Depends(require_auth),
 ):
     """Fetch recent security and policy events."""
     db = get_database()
@@ -46,7 +43,6 @@ async def get_audit_logs(
 async def export_audit_logs(
     format: str = Query("json", regex="^(json|csv)$"),
     hours: int = Query(24, ge=1, le=8760),
-    _auth=Depends(require_auth),
 ):
     """Export audit logs in JSON or CSV format."""
     db = get_database()
@@ -74,7 +70,7 @@ async def export_audit_logs(
 
 
 @router.get("/api/threats/geo")
-async def get_threat_geo_data(_auth=Depends(require_auth)):
+async def get_threat_geo_data():
     """
     Aggregated threat data with coordinates for Globe visualization.
 
@@ -110,7 +106,7 @@ async def get_threat_geo_data(_auth=Depends(require_auth)):
 
 
 @router.get("/api/threats/countries")
-async def get_threat_countries(_auth=Depends(require_auth)):
+async def get_threat_countries():
     """Country-level threat statistics."""
     from backend.core.state import get_traffic_accumulator
     accumulator = get_traffic_accumulator()

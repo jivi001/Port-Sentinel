@@ -12,7 +12,6 @@ from collections import Counter
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, Query
 
-from backend.api.dependencies import require_auth
 from backend.core.state import get_traffic_accumulator
 from backend.core.threat_intel import threat_manager
 
@@ -31,8 +30,7 @@ SIMULATED_THREATS = [
 
 @router.get("/geo")
 async def get_threat_geo(
-    min_risk: int = Query(0, ge=0, le=10),
-    _auth=Depends(require_auth)
+    min_risk: int = Query(0, ge=0, le=10)
 ):
     """
     Get geo-referenced active threat data.
@@ -74,11 +72,11 @@ async def get_threat_geo(
 
 
 @router.get("/countries")
-async def get_threat_countries(_auth=Depends(require_auth)):
+async def get_threat_countries():
     """
     Get active threat counts grouped by country.
     """
-    geo_data = await get_threat_geo(min_risk=0, _auth=_auth)
+    geo_data = await get_threat_geo(min_risk=0)
     country_counts = Counter()
     for t in geo_data:
         country_counts[t["country"]] += 1
@@ -91,8 +89,7 @@ async def get_threat_countries(_auth=Depends(require_auth)):
 
 @router.get("/timeline")
 async def get_threat_timeline(
-    hours: int = Query(24, ge=1, le=24),
-    _auth=Depends(require_auth)
+    hours: int = Query(24, ge=1, le=24)
 ):
     """
     Get threat events grouped in time buckets for replay/scrubbing visualization.

@@ -183,31 +183,7 @@ async def connect(sid, environ):
         logger.warning(f"Socket.IO rejected: Invalid origin {origin}")
         return False
 
-    # Authenticate via HttpOnly cookie
-    cookie_header = environ.get("HTTP_COOKIE", "")
-    from http.cookies import SimpleCookie
-    cookie = SimpleCookie(cookie_header)
-    token = cookie.get("sentinel_session")
-    
-    if not token or not token.value:
-        logger.warning(f"Socket.IO rejected: Missing session cookie from {sid}")
-        return False
-        
-    from backend.core.auth import decode_access_token
-    payload = decode_access_token(token.value)
-    if not payload:
-        logger.warning(f"Socket.IO rejected: Invalid JWT from {sid}")
-        return False
-        
-    jti = payload.get("jti")
-    if jti:
-        from backend.core.db import get_database
-        db = get_database()
-        if db.is_token_revoked(jti):
-            logger.warning(f"Socket.IO rejected: Revoked token from {sid}")
-            return False
-
-    logger.info(f"Client connected: {sid} (User: {payload.get('sub')})")
+    logger.info(f"Client connected: {sid}")
     port_table = traffic_accumulator.get_port_table()
     packed = msgpack.packb(port_table, use_bin_type=True)
     await sio.emit("port_table", packed, room=sid)
@@ -386,44 +362,6 @@ if hasattr(signal, "SIGTERM"):
     signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
-# --- Seed Admin User ---
-def _seed_admin_user():
-    """Create the default admin user on first startup."""
-    from sqlalchemy import select
-    from backend.core.models import User, RoleEnum
-    from backend.core.auth import get_password_hash
-
-    try:
-        with db.SessionLocal() as session:
-            admin_exists = session.execute(
-                select(User).where(User.username == "admin")
-            ).scalar_one_or_none()
-            if not admin_exists:
-                admin_pw = os.environ.get("VIGILANT_ADMIN_PASSWORD")
-                if not admin_pw:
-                    # Check if running in explicitly defined dev mode
-                    is_dev = os.environ.get("VIGILANT_ENV", "production").lower() == "development"
-                    if is_dev:
-                        admin_pw = secrets.token_urlsafe(16)
-                        # Do NOT log the password even in dev.
-                        logger.warning("No VIGILANT_ADMIN_PASSWORD set. Generated random admin password in dev mode. Reset it via DB.")
-                    else:
-                        raise ValueError(
-                            "CRITICAL SECURITY ERROR: VIGILANT_ADMIN_PASSWORD must be explicitly set in production environments. "
-                            "Startup aborted to prevent unauthorized access."
-                        )
-                admin_user = User(
-                    username="admin",
-                    email="admin@vigilant.local",
-                    hashed_password=get_password_hash(admin_pw),
-                    role=RoleEnum.ADMIN.value,
-                )
-                session.add(admin_user)
-                session.commit()
-                logger.info("Seeded default admin user")
-    except Exception as e:
-        logger.error(f"Failed to seed admin user: {e}")
-
 
 # --- FastAPI Application ---
 @asynccontextmanager
@@ -458,8 +396,7 @@ async def lifespan(app: FastAPI):
     # Start watchdog
     spawn_watchdog()
 
-    # Seed admin user
-    _seed_admin_user()
+
 
     logger.info(f"{PRODUCT_FULL_NAME} initialized successfully.")
     yield
@@ -482,22 +419,17 @@ app.add_middleware(
 )
 register_middleware(app)
 
-# --- Register API Routers ---
-from backend.api.routes.auth import router as auth_router
 from backend.api.routes.ports import router as ports_router
 from backend.api.routes.control import router as control_router
 from backend.api.routes.approvals import router as approvals_router
 from backend.api.routes.analytics import router as analytics_router
 from backend.api.routes.system import router as system_router
-from backend.api.routes.threats import router as threats_router
 
-app.include_router(auth_router)
 app.include_router(ports_router)
 app.include_router(control_router)
 app.include_router(approvals_router)
 app.include_router(analytics_router)
 app.include_router(system_router)
-app.include_router(threats_router)
 
 # --- Static Frontend Serving ---
 def _find_frontend_dist() -> Optional[str]:
@@ -545,15 +477,6 @@ socket_app = socketio.ASGIApp(sio, other_asgi_app=app)
 # --- Entry Point ---
 def main() -> None:
     """Run the Vigilant ASGI server."""
-    jwt_secret = os.environ.get("VIGILANT_JWT_SECRET") or os.environ.get("SENTINEL_JWT_SECRET", "")
-    if HOST == "0.0.0.0" and not jwt_secret:
-        logger.warning(
-            "\n" + "=" * 72 + "\n"
-            "  ⚠️  SECURITY WARNING: Binding to 0.0.0.0 WITHOUT a JWT secret!\n"
-            "  Set VIGILANT_JWT_SECRET before exposing to a network.\n"
-            + "=" * 72
-        )
-
     logger.info(f"Starting {PRODUCT_NAME} on {HOST}:{PORT}")
     uvicorn.run(socket_app, host=HOST, port=PORT, log_level="info", access_log=False)
 

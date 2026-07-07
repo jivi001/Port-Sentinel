@@ -13,7 +13,7 @@ import DashboardPage from './pages/DashboardPage';
 
 const ProcessControlPage = lazy(() => import('./pages/ProcessControlPage'));
 const HistoricalLogsPage = lazy(() => import('./pages/HistoricalLogsPage'));
-const NetworkMapPage = lazy(() => import('./pages/NetworkMapPage'));
+
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 const RouteFallback: React.FC = () => (
@@ -41,7 +41,7 @@ const App: React.FC = () => {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/processes" element={<ProcessControlPage />} />
               <Route path="/history" element={<HistoricalLogsPage />} />
-              <Route path="/network" element={<NetworkMapPage />} />
+
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="*" element={
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>

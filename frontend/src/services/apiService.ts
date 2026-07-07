@@ -17,33 +17,14 @@ export const apiService = {
    * Internal fetch wrapper with fallback logic.
    */
   _call: async (path: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem('sentinel_token');
     const headers: Record<string, string> = { 
       'Content-Type': 'application/json',
       ...(options.headers as Record<string, string>)
     };
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    // Extract CSRF token from cookies
-    const getCookie = (name: string) => {
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop()?.split(';').shift();
-      return undefined;
-    };
-    
-    const csrfToken = getCookie('csrf_token');
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
-    }
 
     const requestInit: RequestInit = {
       ...options,
       headers,
-      credentials: 'include',
     };
 
     const primaryBase = IS_DEV ? DEV_BACKEND_URL : PROXY_BASE;
@@ -91,12 +72,7 @@ export const apiService = {
     apiService._call(`/audit/logs?limit=${limit}`),
   getTopTalkers: async (hours: number = 24, limit: number = 10): Promise<any[]> => 
     apiService._call(`/analytics/top-talkers?hours=${hours}&limit=${limit}`),
-  getThreatGeo: async (minRisk: number = 0): Promise<any[]> => 
-    apiService._call(`/threats/geo?min_risk=${minRisk}`),
-  getThreatCountries: async (): Promise<any[]> => 
-    apiService._call('/threats/countries'),
-  getThreatTimeline: async (hours: number = 24): Promise<any[]> => 
-    apiService._call(`/threats/timeline?hours=${hours}`),
+
 
   blockPort: async (port: number, protocol: string = 'TCP'): Promise<boolean> => {
     const res = await apiService._call(`/control/block/${port}?protocol=${protocol}`, { method: 'POST' });

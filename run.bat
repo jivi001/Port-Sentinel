@@ -54,6 +54,7 @@ if not exist ".venv" (
 
 echo [3/4] Installing dependencies...
 .venv\Scripts\python.exe -m pip install --upgrade pip --quiet
+set MSGPACK_PUREPYTHON=1
 .venv\Scripts\python.exe -m pip install -e ".[dev]"
 if errorlevel 1 (
     echo ERROR: Dependency installation failed.
@@ -74,7 +75,7 @@ echo Dashboard will be at: http://localhost:5173
 echo.
 
 REM Start backend in a separate terminal so we can see its logs
-start "Vigilant_Backend" cmd /k ".venv\Scripts\python.exe -m backend.main"
+start "Vigilant_Backend" cmd /k "set VIGILANT_ENV=development&& set VIGILANT_JWT_SECRET=dev_secret_do_not_use_in_prod&& .venv\Scripts\python.exe -m backend.main"
 
 REM Start frontend in this terminal
 pushd frontend

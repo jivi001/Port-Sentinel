@@ -100,67 +100,27 @@ class AnalystApproval(Base):
     resolved_by = Column(String, nullable=True)
 
 
-class RoleEnum(str, enum.Enum):
-    ADMIN = "admin"
-    ANALYST = "analyst"
-    VIEWER = "viewer"
-
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    username = Column(String, unique=True, index=True, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-    role = Column(String, nullable=False, default=RoleEnum.VIEWER.value)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(Float, nullable=False, default=time.time)
-
-
 class DashboardLayout(Base):
-    """Persisted dashboard widget layouts per user."""
+    """Persisted dashboard widget layouts."""
     __tablename__ = "dashboard_layouts"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String, nullable=False, default="default")
     layout_json = Column(Text, nullable=False)
     updated_at = Column(Float, nullable=False)
 
     __table_args__ = (
-        Index("ix_dashboard_user_name", "user_id", "name", unique=True),
+        Index("ix_dashboard_name", "name", unique=True),
     )
 
 
 class UserPreference(Base):
-    """Key-value user preferences (theme, refresh interval, alert thresholds)."""
+    """Key-value application preferences (theme, refresh interval, alert thresholds)."""
     __tablename__ = "user_preferences"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    key = Column(String, nullable=False)
+    key = Column(String, nullable=False, unique=True)
     value = Column(String, nullable=False)
 
-    __table_args__ = (
-        Index("ix_pref_user_key", "user_id", "key", unique=True),
-    )
 
 
-class FailedLoginAttempt(Base):
-    __tablename__ = "failed_login_attempts"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    ip_address = Column(String, index=True, nullable=False)
-    attempts = Column(Integer, nullable=False, default=1)
-    last_attempt = Column(Float, nullable=False, default=time.time)
-    locked_until = Column(Float, nullable=True)
-
-
-class RevokedToken(Base):
-    __tablename__ = "revoked_tokens"
-
-    jti = Column(String, primary_key=True, index=True)
-    expires_at = Column(Float, nullable=False)
-    reason = Column(String, default="")
-    revoked_by = Column(String, nullable=True)
