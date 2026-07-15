@@ -72,6 +72,12 @@ export const apiService = {
     apiService._call(`/audit/logs?limit=${limit}`),
   getTopTalkers: async (hours: number = 24, limit: number = 10): Promise<any[]> => 
     apiService._call(`/analytics/top-talkers?hours=${hours}&limit=${limit}`),
+  getThreatGeo: async (minRisk: number = 0): Promise<any[]> => 
+    apiService._call(`/threats/geo?min_risk=${minRisk}`),
+  getThreatCountries: async (): Promise<any[]> => 
+    apiService._call('/threats/countries'),
+  getThreatTimeline: async (hours: number = 24): Promise<any[]> => 
+    apiService._call(`/threats/timeline?hours=${hours}`),
 
 
   blockPort: async (port: number, protocol: string = 'TCP'): Promise<boolean> => {

@@ -64,7 +64,7 @@ const NetworkMapPage: React.FC = () => {
       ]);
       
       setThreats(geoData);
-      setCountries(countryData.sort((a, b) => b.count - a.count));
+      setCountries(countryData.sort((a: { count: number }, b: { count: number }) => b.count - a.count));
       setTimeline(timelineData);
       
       if (timelineData.length > 0 && replayIndex >= timelineData.length) {

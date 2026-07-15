@@ -26,7 +26,10 @@ const HistoricalLogsPage: React.FC = () => {
     setLoading(true);
     try {
       const data = await apiService.getPortHistory(selectedPort, selectedRange);
-      setHistory(data);
+      setHistory(data.map((item: any) => ({
+        ...item,
+        kb_s_out: -item.kb_s_out
+      })));
     } catch (e) {
       console.error(e);
     } finally { setLoading(false); }
@@ -87,7 +90,14 @@ const HistoricalLogsPage: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-dim)" vertical={false} />
                 <XAxis dataKey="timestamp" hide />
                 <YAxis hide />
-                <Tooltip contentStyle={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: '8px' }} />
+                <Tooltip 
+                  contentStyle={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: '8px' }}
+                  formatter={(value: any, name: any) => {
+                    const formattedVal = Math.abs(Number(value)).toFixed(1) + ' KB/s';
+                    const formattedName = name === 'kb_s_in' ? 'INBOUND' : 'OUTBOUND';
+                    return [formattedVal, formattedName];
+                  }}
+                />
                 <Area type="monotone" dataKey="kb_s_in" stroke="var(--accent-blue)" fill="var(--accent-blue)" fillOpacity={0.1} isAnimationActive={false} />
                 <Area type="monotone" dataKey="kb_s_out" stroke="var(--accent-orange)" fill="var(--accent-orange)" fillOpacity={0.1} isAnimationActive={false} />
               </AreaChart>
