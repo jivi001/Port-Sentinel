@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Vigilant Startup Script for Unix/Linux/macOS
+# Port-Sentinel Startup Script for Unix/Linux/macOS
 # Starts backend + frontend development servers.
 
 set -euo pipefail

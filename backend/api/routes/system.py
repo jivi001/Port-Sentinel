@@ -12,7 +12,7 @@ import threading
 import platform
 
 import psutil
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 
 

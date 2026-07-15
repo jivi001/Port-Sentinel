@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Vigilant Enterprise Network Defense — Installation Script (Unix)
+# Port-Sentinel — Installation Script (Unix)
 
 echo "========================================================"
-echo "  Vigilant Enterprise Network Defense — Installer (Unix)"
+echo "  Port-Sentinel — Installer (Unix)"
 echo "========================================================"
 echo
 
@@ -76,7 +76,7 @@ cd ..
 
 echo
 echo "========================================================"
-echo "  Vigilant Installation Completed Successfully!"
+echo "  Port-Sentinel Installation Completed Successfully!"
 echo "========================================================"
 echo "  To launch the platform, run: sudo ./scripts/start.sh"
 echo "========================================================"

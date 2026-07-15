@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Vigilant Enterprise Network Defense — Stop Services Script (Unix)
+# Port-Sentinel — Stop Services Script (Unix)
 
 echo "========================================================"
-echo "  Stopping Vigilant Enterprise Network Defense Services..."
+echo "  Stopping Port-Sentinel Services..."
 echo "========================================================"
 echo
 
@@ -48,6 +48,6 @@ stop_port 5173 "Frontend Server"
 
 echo
 echo "========================================================"
-echo "  Vigilant Services Stopped!"
+echo "  Port-Sentinel Services Stopped!"
 echo "========================================================"
 exit 0

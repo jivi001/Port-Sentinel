@@ -1,8 +1,8 @@
 @echo off
-:: Vigilant Enterprise Network Defense — Stop Services Script (Windows)
+:: Port-Sentinel — Stop Services Script (Windows)
 
 echo ========================================================
-echo   Stopping Vigilant Enterprise Network Defense Services...
+echo   Stopping Port-Sentinel Services...
 echo ========================================================
 echo.
 
@@ -46,6 +46,6 @@ if defined frontend_pid (
 
 echo.
 echo ========================================================
-echo   Vigilant Services Stopped!
+echo   Port-Sentinel Services Stopped!
 echo ========================================================
 exit /b 0

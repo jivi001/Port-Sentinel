@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-REM Vigilant - DEBUG Startup Script
+REM Port-Sentinel - DEBUG Startup Script
 cd /d "%~dp0"
 
 echo [1/4] Validating Prerequisites...
@@ -75,7 +75,7 @@ echo Dashboard will be at: http://localhost:5173
 echo.
 
 REM Start backend in a separate terminal so we can see its logs
-start "Vigilant_Backend" cmd /k "set VIGILANT_ENV=development&& set VIGILANT_JWT_SECRET=dev_secret_do_not_use_in_prod&& .venv\Scripts\python.exe -m backend.main"
+start "Port-Sentinel_Backend" cmd /k "set VIGILANT_ENV=development&& set VIGILANT_JWT_SECRET=dev_secret_do_not_use_in_prod&& .venv\Scripts\python.exe -m backend.main"
 
 REM Start frontend in this terminal
 pushd frontend
@@ -84,5 +84,5 @@ popd
 
 echo.
 echo Closing backend...
-taskkill /FI "WINDOWTITLE eq Vigilant_Backend*" /T >nul 2>&1
+taskkill /FI "WINDOWTITLE eq Port-Sentinel_Backend*" /T >nul 2>&1
 pause

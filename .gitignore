@@ -55,3 +55,5 @@ sentinel_pf_rules.conf
 graphify-out/
 CLAUDE.md
 
+docs/
+*.md

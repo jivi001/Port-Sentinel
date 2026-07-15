@@ -1,8 +1,8 @@
 @echo off
-:: Vigilant Enterprise Network Defense — Start Services Script (Windows)
+:: Port-Sentinel — Start Services Script (Windows)
 
 echo ========================================================
-echo   Starting Vigilant Enterprise Network Defense...
+echo   Starting Port-Sentinel...
 echo ========================================================
 echo.
 
@@ -14,7 +14,7 @@ if not exist "logs" (
 :: 1. Start Backend Service
 echo [*] Starting Backend Service on http://127.0.0.1:8600 ...
 :: Run uvicorn server in background, logging to logs\backend.log
-start "Vigilant Backend" /b .venv\Scripts\python.exe -m backend.main > logs\backend.log 2>&1
+start "Port-Sentinel Backend" /b .venv\Scripts\python.exe -m backend.main > logs\backend.log 2>&1
 if %errorLevel% neq 0 (
     echo [ERROR] Failed to start backend service.
     exit /b 1
@@ -23,7 +23,7 @@ if %errorLevel% neq 0 (
 :: 2. Start Frontend Dev Server
 echo [*] Starting Frontend Server...
 cd frontend
-start "Vigilant Frontend" /b npm run dev > ..\logs\frontend.log 2>&1
+start "Port-Sentinel Frontend" /b npm run dev > ..\logs\frontend.log 2>&1
 if %errorLevel% neq 0 (
     echo [ERROR] Failed to start frontend server.
     cd ..
@@ -33,7 +33,7 @@ cd ..
 
 echo.
 echo ========================================================
-echo   Vigilant Services Running in the Background!
+echo   Port-Sentinel Services Running in the Background!
 echo ========================================================
 echo   - Backend: http://127.0.0.1:8600
 echo   - Interface: http://localhost:5173 (standard Vite port)

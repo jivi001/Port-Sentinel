@@ -1,7 +1,5 @@
 # Vigilant Enterprise Network Defense
 
-> **Production-grade active network traffic visibility, threat detection, and analyst response control console.**
-
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
@@ -11,16 +9,12 @@
 
 ## 1. Overview
 
-**Vigilant Enterprise Network Defense** is an endpoint-focused active response and visibility console designed for system administrators, security analysts (blue team operators), and enterprise operations teams. 
+**Vigilant Enterprise Network Defense** is an endpoint network visibility and active response console. It captures live network traffic, maps it to active processes in real-time, and enriches remote connections with threat intelligence.
 
-Vigilant solves the problem of "blind" endpoints by capturing live network traffic, mapping it to active processes in real-time, and enriching remote connections with threat intelligence. Going beyond passive monitoring, Vigilant implements an **Analyst-in-the-Loop Control Plane** allowing operators or an automated policy engine to:
-1. **Hard-block suspicious network ports** natively using local OS firewalls.
-2. **Initiate an Analyst Approval workflow** to review and request process actions (such as suspending or resuming anomalous applications) without exposing automated endpoints to process manipulation exploits.
-
-### Key Value Propositions
-- **Zero-Latency Network Mapping:** Isolates raw packet sniffing to a dedicated sub-process writing directly to an HMAC-signed shared memory map, completely bypassing Python's GIL.
-- **Analyst-in-the-Loop Mitigation:** Prevents automated denial-of-service risks by running all process interventions through a structured review queue requiring explicit operator authorization.
-- **Enterprise Ready & Cross-Platform:** Native adapters implement firewalls and process resolution uniformly across Windows (`netsh`), macOS (`pfctl`), and Linux (`nftables`/`iptables`/`ufw`).
+Vigilant allows operators or automated policies to:
+1. **Block network ports** natively using local OS firewalls (`netsh`, `pfctl`, `nftables`/`iptables`/`ufw`).
+2. **Review process actions** (suspend, resume) through an Analyst Approval workflow queue.
+3. **Capture network traffic** in a dedicated sub-process writing directly to an HMAC-signed shared memory map, bypassing Python's GIL.
 
 ---
 
@@ -89,7 +83,6 @@ graph TD
 - **Database:** SQLite (WAL mode) / PostgreSQL (via SQLAlchemy dialect auto-detection)
 
 ### Infrastructure
-- **Docker:** Multi-stage Dockerfiles utilizing non-root users, security scans, and `compose` templates.
 - **CI/CD:** GitHub Actions workflow verifying macOS, Linux, and Windows matrix builds.
 
 ---
@@ -98,7 +91,7 @@ graph TD
 
 Vigilant requires elevated system privileges to sniff packets and adjust local firewalls.
 
-### Native Installation (Recommended)
+### Installation
 
 #### Prerequisites
 - **Python 3.10+** (Python 3.12 recommended)

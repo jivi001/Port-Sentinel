@@ -6,9 +6,6 @@ This guide provides instructions for deploying, administering, and maintaining *
 
 ## 1. Deployment Strategies
 
-Vigilant can be deployed in two modes depending on requirements for active mitigation controls.
-
-### 1.1 Native Host Deployment (Full Control Mode - Recommended)
 To allow Vigilant to block network ports via local firewalls and query process tables accurately, run it natively on the target operating system.
 
 #### Windows Server
@@ -37,20 +34,6 @@ To allow Vigilant to block network ports via local firewalls and query process t
   ```bash
   sudo setcap cap_net_raw,cap_net_admin+eip /opt/vigilant/.venv/bin/python3
   ```
-
----
-
-### 1.2 Docker Containerized Deployment
-While containerization limits direct firewall manipulations on the host, it is highly suitable for read-only networks or sensor nodes.
-
-- **Capabilities Requirement:** The container must run with net-admin privileges. The `docker-compose.yml` must include:
-  ```yaml
-  cap_add:
-    - NET_ADMIN
-    - NET_RAW
-  network_mode: "host"
-  ```
-- **Scaling:** Spawning multiple 센서 containers is possible as long as they listen on separate interfaces.
 
 ---
 

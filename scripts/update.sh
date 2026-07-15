@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Vigilant Enterprise Network Defense — Update Script (Unix)
+# Port-Sentinel — Update Script (Unix)
 
 echo "========================================================"
-echo "  Updating Vigilant Enterprise Network Defense (Unix)..."
+echo "  Updating Port-Sentinel (Unix)..."
 echo "========================================================"
 echo
 
@@ -51,7 +51,7 @@ fi
 
 echo
 echo "========================================================"
-echo "  Vigilant Update Completed Successfully!"
+echo "  Port-Sentinel Update Completed Successfully!"
 echo "========================================================"
 echo "  To launch the updated services, run: sudo ./scripts/start.sh"
 echo "========================================================"

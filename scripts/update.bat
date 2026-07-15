@@ -1,8 +1,8 @@
 @echo off
-:: Vigilant Enterprise Network Defense — Update Script (Windows)
+:: Port-Sentinel — Update Script (Windows)
 
 echo ========================================================
-echo   Updating Vigilant Enterprise Network Defense...
+echo   Updating Port-Sentinel...
 echo ========================================================
 echo.
 
@@ -51,7 +51,7 @@ if exist "frontend" (
 
 echo.
 echo ========================================================
-echo   Vigilant Update Completed Successfully!
+echo   Port-Sentinel Update Completed Successfully!
 echo ========================================================
 echo   To launch the updated services, run: scripts\start.bat
 echo ========================================================

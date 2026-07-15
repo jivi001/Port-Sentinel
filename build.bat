@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  Vigilant — Build .exe Script
+REM  Port-Sentinel — Build .exe Script
 REM  
 REM  This script:
 REM    1. Builds the React frontend (npm run build)
@@ -16,7 +16,7 @@ setlocal enabledelayedexpansion
 
 echo.
 echo ========================================
-echo   Vigilant — EXE Builder
+echo   Port-Sentinel — EXE Builder
 echo ========================================
 echo.
 
@@ -104,7 +104,7 @@ if !errorlevel! neq 0 (
 )
 
 REM --- Step 3: Build the .exe ---
-echo [3/3] Building Vigilant.exe...
+echo [3/3] Building Port-Sentinel.exe...
 echo      This may take a few minutes...
 echo.
 net session >nul 2>&1
@@ -121,8 +121,8 @@ if !errorlevel! neq 0 (
 )
 
 REM Remove Mark-of-the-Web so Windows does not treat the new .exe as an untrusted download
-if exist "dist\Vigilant.exe" (
-    powershell -NoProfile -Command "Unblock-File -LiteralPath 'dist\Vigilant.exe' -ErrorAction SilentlyContinue" >nul 2>&1
+if exist "dist\Port-Sentinel.exe" (
+    powershell -NoProfile -Command "Unblock-File -LiteralPath 'dist\Port-Sentinel.exe' -ErrorAction SilentlyContinue" >nul 2>&1
 )
 
 echo.
@@ -130,10 +130,10 @@ echo ========================================
 echo   BUILD SUCCESSFUL!
 echo ========================================
 echo.
-echo   Output: dist\Vigilant.exe
+echo   Output: dist\Port-Sentinel.exe
 echo.
 echo   To run:
-echo     1. Right-click dist\Vigilant.exe
+echo     1. Right-click dist\Port-Sentinel.exe
 echo     2. Select "Run as administrator"
 echo     3. Browser will open automatically
 echo.

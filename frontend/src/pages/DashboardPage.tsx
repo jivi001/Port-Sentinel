@@ -71,24 +71,27 @@ const DashboardPage: React.FC = () => {
         const existing = timeMap.get(sec);
         if (existing) {
           existing.inKb += p.kbIn;
-          existing.outKb += p.kbOut;
+          existing.outKb -= p.kbOut;
         } else {
-          timeMap.set(sec, { t: sec, inKb: p.kbIn, outKb: p.kbOut });
+          timeMap.set(sec, { t: sec, inKb: p.kbIn, outKb: -p.kbOut });
         }
       }
     });
     return Array.from(timeMap.values())
       .sort((a, b) => a.t - b.t)
       .slice(-60);
-  }, [sparklineData]);
+  }, [sparklineData, portTable]);
 
   return (
     <div className="page-container" style={{ overflowY: 'auto' }}>
-      <header className="page-header">
+      <header className="page-header" style={{ borderBottom: '1px solid var(--border-dim)', paddingBottom: 'var(--space-md)' }}>
         <div>
-          <h1 className="page-title">Operational Dashboard</h1>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-            DRAG-AND-DROP WIDGET CONTAINER ENABLED
+          <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-blue)', boxShadow: '0 0 10px var(--accent-blue)' }}></span>
+            Operational Dashboard
+          </h1>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Real-time network threat intelligence and traffic analysis.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)' }}>

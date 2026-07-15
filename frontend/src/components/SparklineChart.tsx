@@ -24,7 +24,7 @@ const SparklineChart: React.FC<SparklineChartProps> = ({
     return data.map(p => ({
       t: p.t,
       in: p.kbIn,
-      out: p.kbOut,
+      out: -p.kbOut,
     }));
   }, [data]);
 
@@ -53,8 +53,8 @@ const SparklineChart: React.FC<SparklineChartProps> = ({
               <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity={0.05} />
             </linearGradient>
             <linearGradient id={outId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent-orange)" stopOpacity={0.6} />
-              <stop offset="100%" stopColor="var(--accent-orange)" stopOpacity={0.05} />
+              <stop offset="0%" stopColor="var(--accent-orange)" stopOpacity={0.05} />
+              <stop offset="100%" stopColor="var(--accent-orange)" stopOpacity={0.6} />
             </linearGradient>
           </defs>
           <Area

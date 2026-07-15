@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Vigilant Enterprise Network Defense — Start Services Script (Unix)
+# Port-Sentinel — Start Services Script (Unix)
 
 echo "========================================================"
-echo "  Starting Vigilant Enterprise Network Defense (Unix)..."
+echo "  Starting Port-Sentinel (Unix)..."
 echo "========================================================"
 echo
 
@@ -46,7 +46,7 @@ fi
 
 echo
 echo "========================================================"
-echo "  Vigilant Services Running in the Background!"
+echo "  Port-Sentinel Services Running in the Background!"
 echo "========================================================"
 echo "  - Backend (PID: $BACKEND_PID): http://127.0.0.1:8600"
 echo "  - Interface (PID: $FRONTEND_PID): http://localhost:5173"
