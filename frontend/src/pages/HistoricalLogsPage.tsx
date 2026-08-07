@@ -1,3 +1,4 @@
+
 /**
  * Sentinel — Professional Forensics Page
  */
@@ -56,21 +57,21 @@ const HistoricalLogsPage: React.FC = () => {
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
           <div className="btn-group">
             {TIME_RANGES.map((r) => (
-              <button 
-                key={r.hours} 
+              <button
+                key={r.hours}
                 className={`btn ${selectedRange === r.hours ? 'btn--active' : ''}`}
                 onClick={() => setSelectedRange(r.hours)}
               >{r.label}</button>
             ))}
           </div>
-          <select 
-            className="btn" 
+          <select
+            className="btn"
             style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-default)', color: 'white' }}
-            value={selectedPort ?? ''} 
+            value={selectedPort ?? ''}
             onChange={(e) => setSelectedPort(e.target.value ? Number(e.target.value) : null)}
           >
             <option value="">SELECT PORT...</option>
-            {[...new Set(portTable.map(p => p.port))].sort((a,b) => a-b).map(p => <option key={p} value={p}>{p}</option>)}
+            {[...new Set(portTable.map(p => p.port))].sort((a, b) => a - b).map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           {loading && (
             <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', letterSpacing: '0.05em' }}>LOADING_HISTORY</span>
@@ -90,7 +91,7 @@ const HistoricalLogsPage: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-dim)" vertical={false} />
                 <XAxis dataKey="timestamp" hide />
                 <YAxis hide />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{ background: 'var(--bg-secondary)', border: 'none', borderRadius: '8px' }}
                   formatter={(value: any, name: any) => {
                     const formattedVal = Math.abs(Number(value)).toFixed(1) + ' KB/s';

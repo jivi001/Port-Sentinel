@@ -59,7 +59,7 @@ class TestSnifferPacketCallback:
     def _make_sniffer(self):
         """Create a SnifferProcess without starting a real process."""
         # Call __init__ properly to avoid AttributeError in repr()
-        s = SnifferProcess(interface=None)
+        s = SnifferProcess(shm_name="MockSHM", hmac_key="MockKey", interface=None)
         s._shm = None
         s._accum = {}
         return s

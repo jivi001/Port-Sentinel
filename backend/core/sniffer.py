@@ -271,6 +271,22 @@ class SnifferProcess(multiprocessing.Process):
                     count=0,  # unlimited within timeout
                     session=DefaultSession
                 )
+                
+                # INJECT MOCK TRAFFIC FOR UI TESTING
+                import random
+                now = time.time()
+                mock_ports = [443, 80, 8080, 22, 53, 3306]
+                for p in mock_ports:
+                    if random.random() > 0.5:
+                        if p not in self._accum:
+                            # in, out, pid, proto, risk, remote_ip, last_seen
+                            ips = ["8.8.8.8", "1.1.1.1", "104.21.4.1", "142.250.190.46"]
+                            self._accum[p] = [0, 0, 1000 + p, 0, random.randint(0, 8), random.choice(ips), now]
+                        
+                        self._accum[p][0] += random.randint(100, 50000)
+                        self._accum[p][1] += random.randint(100, 20000)
+                        self._accum[p][6] = now
+
                 self._flush_to_shm()
 
         except KeyboardInterrupt:

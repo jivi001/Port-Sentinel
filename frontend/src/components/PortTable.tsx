@@ -19,43 +19,78 @@ const ROW_HEIGHT = 48; // Increased for better multi-line legibility
 
 const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) => {
   const parentRef = useRef<HTMLDivElement>(null);
+  
+  const [sortKey, setSortKey] = React.useState<keyof PortTableType[0] | null>(null);
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
+  const [contextMenuOpenId, setContextMenuOpenId] = React.useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    if (!filter) return data;
-    const q = filter.toLowerCase();
-    return data.filter(
-      (e) =>
-        String(e.port).includes(q) ||
-        e.app_name.toLowerCase().includes(q) ||
-        String(e.pid).includes(q) ||
-        e.protocol.toLowerCase().includes(q) ||
-        e.remote_ip.includes(q) ||
-        e.org.toLowerCase().includes(q)
-    );
-  }, [data, filter]);
+  const handleSort = (key: keyof PortTableType[0]) => {
+    if (sortKey === key) {
+      if (sortDir === 'asc') setSortDir('desc');
+      else setSortKey(null);
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    let result = data;
+    if (filter) {
+      const q = filter.toLowerCase();
+      result = data.filter(
+        (e) =>
+          String(e.port).includes(q) ||
+          e.app_name.toLowerCase().includes(q) ||
+          String(e.pid).includes(q) ||
+          e.protocol.toLowerCase().includes(q) ||
+          e.remote_ip.includes(q) ||
+          e.org.toLowerCase().includes(q)
+      );
+    }
+    
+    if (sortKey) {
+      result = [...result].sort((a, b) => {
+        const valA = a[sortKey];
+        const valB = b[sortKey];
+        if (valA == null) return 1;
+        if (valB == null) return -1;
+        if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return result;
+  }, [data, filter, sortKey, sortDir]);
 
   const virtualizer = useVirtualizer({
-    count: filtered.length,
+    count: filteredAndSorted.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 10,
   });
 
+  const renderSortIcon = (key: keyof PortTableType[0]) => {
+    if (sortKey !== key) return null;
+    return sortDir === 'asc' ? ' ↑' : ' ↓';
+  };
+
   const renderHeader = () => (
     <div className="port-table-header">
-      <div className="port-col-port">PORT</div>
-      <div className="port-col-proto">PROTO</div>
-      <div className="port-col-app">APPLICATION & PID</div>
-      <div className="port-col-endpoint">REMOTE ENDPOINT</div>
-      <div className="port-col-traffic">IN</div>
-      <div className="port-col-traffic">OUT</div>
+      <div className="port-col-port" onClick={() => handleSort('port')} style={{ cursor: 'pointer' }}>PORT{renderSortIcon('port')}</div>
+      <div className="port-col-proto" onClick={() => handleSort('protocol')} style={{ cursor: 'pointer' }}>PROTO{renderSortIcon('protocol')}</div>
+      <div className="port-col-app" onClick={() => handleSort('app_name')} style={{ cursor: 'pointer' }}>APPLICATION & PID{renderSortIcon('app_name')}</div>
+      <div className="port-col-endpoint" onClick={() => handleSort('remote_ip')} style={{ cursor: 'pointer' }}>REMOTE ENDPOINT{renderSortIcon('remote_ip')}</div>
+      <div className="port-col-traffic" onClick={() => handleSort('kb_s_in')} style={{ cursor: 'pointer' }}>IN{renderSortIcon('kb_s_in')}</div>
+      <div className="port-col-traffic" onClick={() => handleSort('kb_s_out')} style={{ cursor: 'pointer' }}>OUT{renderSortIcon('kb_s_out')}</div>
       <div className="port-col-traffic">TOTAL</div>
-      <div className="port-col-risk">RISK</div>
+      <div className="port-col-risk" onClick={() => handleSort('risk_score')} style={{ cursor: 'pointer' }}>RISK{renderSortIcon('risk_score')}</div>
       <div className="port-col-trend">TREND</div>
+      <div style={{ width: '40px' }} />
     </div>
   );
 
-  if (filtered.length === 0) {
+  if (filteredAndSorted.length === 0) {
     return (
       <div className="port-table-container">
         {renderHeader()}
@@ -82,14 +117,15 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
           }}
         >
           {virtualizer.getVirtualItems().map((virtualRow) => {
-            const entry = filtered[virtualRow.index];
+            const entry = filteredAndSorted[virtualRow.index];
             const sparkline = sparklineData.get(entry.port) || [];
             const risk = entry.risk_score ?? 0;
             const isHighRisk = risk >= 7;
+            const rowId = `${entry.protocol}-${entry.port}-${entry.pid}`;
 
             return (
               <div
-                key={`${entry.protocol}-${entry.port}-${entry.pid}`}
+                key={rowId}
                 className={`port-row ${isHighRisk ? 'port-row--high-risk' : ''}`}
                 style={{
                   position: 'absolute',
@@ -138,11 +174,62 @@ const PortTable: React.FC<PortTableProps> = ({ data, sparklineData, filter }) =>
                 <div className="port-col-trend">
                   <SparklineChart data={sparkline} />
                 </div>
+                
+                <div style={{ width: '40px', display: 'flex', justifyContent: 'flex-end', position: 'relative' }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContextMenuOpenId(contextMenuOpenId === rowId ? null : rowId);
+                      }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                    >
+                      ⋮
+                    </button>
+                    
+                    {contextMenuOpenId === rowId && (
+                      <div 
+                        style={{
+                          position: 'absolute', top: '100%', right: '10px', zIndex: 100,
+                          background: 'var(--bg-secondary)', border: '1px solid var(--border-dim)',
+                          borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-md)',
+                          minWidth: '150px', padding: '4px 0', overflow: 'hidden'
+                        }}
+                      >
+                        <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setContextMenuOpenId(null);
+                            }}
+                            className="context-menu-item context-menu-item--danger"
+                            style={{ padding: '8px 16px', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--accent-red)' }}
+                          >
+                            Block Port {entry.port}
+                        </div>
+                        <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setContextMenuOpenId(null);
+                            }}
+                            className="context-menu-item"
+                            style={{ padding: '8px 16px', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-primary)' }}
+                          >
+                            Kill PID {entry.pid}
+                        </div>
+                      </div>
+                    )}
+                </div>
               </div>
             );
           })}
         </div>
       </div>
+      {/* Click outside to close context menu */}
+      {contextMenuOpenId && (
+        <div 
+          onClick={() => setContextMenuOpenId(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 99 }} 
+        />
+      )}
     </div>
   );
 };

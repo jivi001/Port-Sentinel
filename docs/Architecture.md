@@ -1,105 +1,71 @@
-# Vigilant System Architecture
+# Port Sentinel Architecture
 
-This document describes the high-level architecture, component communication patterns, and technical decisions behind **Vigilant Enterprise Network Defense**.
+Vigilant Port Sentinel follows a strict Clean Architecture pattern combined with CQRS (Command Query Responsibility Segregation) and an Event-Driven domain layer.
 
----
+## System Diagram
 
-## 1. Architectural Blueprint
+```mermaid
+graph TD
+    %% Presentation Layer
+    subgraph Presentation ["Presentation Layer"]
+        API[FastAPI Routes]
+        WS[Socket.IO Server]
+        Middleware[Security & Logging]
+    end
 
-Vigilant is divided into two distinct zones:
-1. **The Capture Plane (Data Plane):** A privileged sub-process running packet capturing.
-2. **The Control Plane (Management Plane):** The core FastAPI REST / WebSocket servers, database models, and OS adapters.
+    %% Application Layer
+    subgraph Application ["Application Layer (CQRS)"]
+        Commands[Command Handlers]
+        Queries[Query Handlers]
+        EventBus[Async Event Bus]
+        Jobs[Background Scheduler]
+    end
 
-```
-+--------------------------------------------------------------+
-|                        CAPTURE PLANE                         |
-|                                                              |
-|   [ Network Interface ]                                      |
-|            |                                                 |
-|            v (Raw Packets)                                   |
-|   [ Scapy Packet Capture Sniffer ]                           |
-|            |                                                 |
-|            v (Write delta structures)                        |
-|   [ 2MB Fixed-Size Shared Memory Map ]                       |
-+--------------------------------------------------------------+
-                             ||  (HMAC signed & verified)
-                             ||  (Lock-free 1Hz read pass)
-                             v
-+--------------------------------------------------------------+
-|                        CONTROL PLANE                         |
-|                                                              |
-|                  [ Async Dispatcher Loop ]                   |
-|                        /           \                         |
-|                       /             \                        |
-|                      v               v                       |
-|         [ Traffic Accumulator ]  [ Policy Engine ]           |
-|                /       \                 |                   |
-|               /         \                v                   |
-|              v           v       [ Analyst Queue ]           |
-|      [ SQLite/PostgreSQL ]       [ OS adapters ]             |
-|              |                           |                   |
-|              v                           v                   |
-|     (MsgPack Broadcast)          (Firewall / netsh)          |
-|      [ Socket.IO WS ]                                        |
-+--------------------------------------------------------------+
-```
+    %% Domain Layer
+    subgraph Domain ["Domain Layer (Core)"]
+        Entities[Entities: Port, Process, Threat]
+        Events[Domain Events: PortDetected...]
+        Policies[Policy Engine]
+        Interfaces[Repository & Adapter Interfaces]
+    end
 
----
+    %% Infrastructure Layer
+    subgraph Infrastructure ["Infrastructure Layer"]
+        DB[(SQLite & InfluxDB)]
+        Network[WinDivert / NFQueue Sniffer]
+        OS[OS Adapters: Win32, Linux, Mac]
+    end
 
-## 2. Low-Level Capture & Shared Memory IPC
-
-The core challenge of real-time Python-based packet analysis is avoiding the CPU overhead of Python's **Global Interpreter Lock (GIL)** and avoiding high serialization costs. 
-
-### Multiprocessing Capture
-Vigilant spawns a dedicated background process (`SnifferProcess`) that handles packet captures natively via `Scapy`. This process runs in its own execution thread on a separate CPU core.
-
-### HMAC-Signed Shared Memory Map
-Rather than using pipes, queues, or socket sockets, the capture process writes connection data directly to a **2MB fixed-size Shared Memory block (`multiprocessing.shared_memory.SharedMemory`)**.
-- **Signing:** On every update, the capturing process writes the packet metrics array, computes an HMAC-SHA256 signature of the block using a randomized runtime key, and appends it to the end of the memory block.
-- **Verification:** When the async dispatcher in the FastAPI thread reads the block, it first re-computes the HMAC. If it matches, the data is unpacked. If it doesn't match (indicating a partial write or write-collision), the read is immediately aborted and retried in the next event loop tick. This achieves **lock-free synchronization** between processes.
-
----
-
-## 3. Platform Abstraction Layer (OS Adapters)
-
-To operate seamlessly across Windows, macOS, and Linux, Vigilant abstracts all operating system interactions behind an object-oriented class structure (`BaseBridge`).
-
-```
-              +--------------------------+
-              |   BaseBridge (Abstract)  |
-              +--------------------------+
-                /          |           \
-               /           |            \
-              v            v             v
-      WindowsBridge   DarwinBridge   LinuxBridge
-        (netsh)         (pfctl)      (nftables/iptables/ufw)
+    %% Flow relationships
+    API -->|Dispatch| Commands
+    API -->|Dispatch| Queries
+    WS -->|Listen| EventBus
+    
+    Commands -->|Uses| Interfaces
+    Commands -->|Publishes| EventBus
+    Queries -->|Reads| Interfaces
+    
+    EventBus -->|Triggers| Policies
+    Jobs -->|Executes| Commands
+    
+    Infrastructure -.->|Implements| Interfaces
+    Network -->|Emits| EventBus
+    OS -->|Modifies| Firewall
 ```
 
-### Supported Platform Implementations
-- **Windows (`win32_bridge`):** Uses ctypes and native Windows API functions to query TCP/UDP tables. Mutates firewall states using command calls against `netsh advfirewall`.
-- **macOS (`darwin_bridge`):** Inspects connections using `lsof` and parses output. Configures firewalling by writing rules to `/etc/pf.conf` anchors and triggering `pfctl`.
-- **Linux (`linux_bridge`):** Mapped via `/proc/net` files and `/proc` process mappings. Commands adapt to `nftables` or standard `iptables` and local `ufw` setups.
+## Layer Responsibilities
 
-### Safety Guardrails
-All adapters implement a strict blacklist of protected PIDs (e.g. system processes like PID `0` or `4` on Windows, or PID `1` on Linux/macOS). If a request targets one of these protected processes, the adapter throws a `SystemProcessProtectionError` and blocks the execution.
+### 1. Presentation
+The outermost layer. It contains the FastAPI application, REST endpoints, Socket.IO gateway, and security middleware. It only communicates with the Application layer via Command/Query dispatch.
 
----
+### 2. Application
+The orchestration layer. It contains Use Cases defined as Commands (write operations) and Queries (read operations). It also manages the Event Bus for asynchronous pub/sub messaging across domains.
 
-## 4. Analyst Approval Workflow
+### 3. Domain
+The core business logic. It contains Entities (Ports, Processes, Rules), Value Objects, and Domain Events. The Policy Engine resides here, evaluating domain states without any knowledge of the database or OS.
 
-To prevent automated denial-of-service (such as a bad policy rule blocking critical internal system processes), the platform implements an **Analyst-in-the-Loop approval model**.
+### 4. Infrastructure
+The concrete implementation layer. It contains the database repositories (SQLAlchemy wrapper), OS-specific adapters (Windows, Linux, macOS bridges), and the high-performance packet sniffer wrapper.
 
-- No endpoints exist to terminate, kill, or suspend processes directly.
-- The UI triggers `/api/approvals/request` which creates a ticket in the database.
-- Security analysts review the pending ticket on the queue, inspect the telemetry, and click **Approve** or **Reject**.
-- Only after manual approval does the backend execute the requested process suspension.
-
----
-
-## 5. Frontend Visual Layout & 3D Globe
-
-The user interface is designed for high-density, professional cybersecurity operations.
-
-- **Design System:** Structured entirely with **Vanilla CSS** custom variables supporting unified dark/light themes. Colors are constrained to enterprise codes (White, Blue, Red, Neutral Gray) with no visual gradient clutter.
-- **Widget Customization:** Built around `react-grid-layout`, allowing operators to drag, resize, and configure their dashboard modules (throughput area charts, recent audit logs, approvals, and metrics summaries). Layout coordinates are persisted to `localStorage` and synchronized with the backend.
-- **3D Globe Visualization:** Replaces basic topological layouts with an interactive 3D WebGL globe (`react-globe.gl`). When threats are registered on active ports, they are geolocated and mapped as arcs connecting remote IPs to the local system node.
+## Inter-Process Communication (IPC)
+The packet sniffer runs as an elevated background process. It writes port accumulation metrics directly to a Shared Memory segment. The main FastAPI process reads this memory at 10Hz to broadcast real-time updates via WebSockets, completely bypassing database I/O for real-time traffic monitoring.

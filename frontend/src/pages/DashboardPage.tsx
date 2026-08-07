@@ -35,6 +35,9 @@ const DEFAULT_LAYOUT = [
   { i: 'approvals', x: 0, y: 6, w: 4, h: 3, minH: 3 },
 ];
 
+import { Breadcrumbs } from '../components/Breadcrumbs';
+import { KPIRow } from '../components/KPIRow';
+
 const DashboardPage: React.FC = () => {
   const { portTable, sparklineData, connected, error } = useSocketContext();
   const [filter, setFilter] = useState('');
@@ -84,6 +87,7 @@ const DashboardPage: React.FC = () => {
 
   return (
     <div className="page-container" style={{ overflowY: 'auto' }}>
+      <Breadcrumbs />
       <header className="page-header" style={{ borderBottom: '1px solid var(--border-dim)', paddingBottom: 'var(--space-md)' }}>
         <div>
           <h1 className="page-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -112,6 +116,8 @@ const DashboardPage: React.FC = () => {
       </header>
 
       {error && <div className="error-banner">⚠ SYSTEM_FAULT: {error}</div>}
+
+      <KPIRow />
 
       {/* Dynamic Customizable Widget Grid */}
       <div style={{ margin: '0 -10px' }}>

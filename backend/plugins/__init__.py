@@ -1,0 +1,1 @@
+# Plugins — Extensible monitor registry.
