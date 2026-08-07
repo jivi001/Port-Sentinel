@@ -146,7 +146,10 @@ class SnifferProcess(multiprocessing.Process):
         try:
             # Lazy import
             from scapy.layers.inet import IP, TCP, UDP
-            from backend.core.threat_intel import threat_manager
+
+            if not hasattr(self, "_threat_intel"):
+                from backend.core.threat_intel import ThreatIntel
+                self._threat_intel = ThreatIntel()
 
             if not packet.haslayer(IP):
                 return
@@ -172,7 +175,7 @@ class SnifferProcess(multiprocessing.Process):
             # Accumulate for source port (outbound)
             if sport > 0 and sport < MAX_PORTS:
                 remote_ip = ip_layer.dst
-                risk = threat_manager.get_risk_score(remote_ip)
+                risk = self._threat_intel.get_risk_score(remote_ip)
                 if sport not in self._accum:
                     self._accum[sport] = [0, 0, 0, protocol, 0, "0.0.0.0", 0.0] # in, out, pid, proto, risk, remote_ip, last_seen
                 self._accum[sport][1] += payload_len
@@ -183,7 +186,7 @@ class SnifferProcess(multiprocessing.Process):
             # Accumulate for destination port (inbound)
             if dport > 0 and dport < MAX_PORTS:
                 remote_ip = ip_layer.src
-                risk = threat_manager.get_risk_score(remote_ip)
+                risk = self._threat_intel.get_risk_score(remote_ip)
                 if dport not in self._accum:
                     self._accum[dport] = [0, 0, 0, protocol, 0, "0.0.0.0", 0.0]
                 self._accum[dport][0] += payload_len

@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from backend.core.sniffer import PORT_ENTRY_STRUCT, ENTRY_SIZE, SHM_SIZE, MAX_PORTS
-from backend.core.metrics import PortMetrics, SlidingWindowCache, TrafficAccumulator, PortSnapshot
+from backend.application.services.metrics_service import PortMetrics, SlidingWindowCache, TrafficAccumulator, PortSnapshot
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ def sliding_cache():
 @pytest.fixture
 def accumulator():
     """Fresh TrafficAccumulator with mocked psutil."""
-    with patch("backend.core.metrics.psutil") as mock_psutil:
+    with patch("backend.application.services.metrics_service.psutil") as mock_psutil:
         mock_proc = MagicMock()
         mock_proc.name.return_value = "test_app"
         mock_psutil.Process.return_value = mock_proc

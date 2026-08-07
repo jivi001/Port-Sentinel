@@ -58,8 +58,8 @@ class Container:
         system = platform.system()
         try:
             if system == "Windows":
-                from backend.os_adapters.win32_bridge import Win32Bridge
-                self.os_bridge = Win32Bridge()
+                from backend.os_adapters.win32_bridge import WindowsBridge
+                self.os_bridge = WindowsBridge()
             elif system == "Linux":
                 from backend.os_adapters.linux_bridge import LinuxBridge
                 self.os_bridge = LinuxBridge()

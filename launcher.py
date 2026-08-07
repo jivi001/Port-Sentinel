@@ -64,7 +64,7 @@ def main():
     _open_browser(f"http://localhost:{port}")
 
     # Import and run the backend
-    from backend.main import main as backend_main
+    from backend.__main__ import main as backend_main
     backend_main()
 
 

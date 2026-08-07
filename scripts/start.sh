@@ -20,7 +20,7 @@ mkdir -p logs
 echo "[*] Starting Backend Service on http://127.0.0.1:8600 ..."
 # Run uvicorn server in background, logging to logs/backend.log
 # We preserve the virtualenv environment using the absolute executable path
-.venv/bin/python3 -m backend.main > logs/backend.log 2>&1 &
+.venv/bin/python3 -m backend > logs/backend.log 2>&1 &
 BACKEND_PID=$!
 
 sleep 2

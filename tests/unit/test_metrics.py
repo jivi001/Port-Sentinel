@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, ".")
 
-from backend.core.metrics import (
+from backend.application.services.metrics_service import (
     PortMetrics,
     SlidingWindowCache,
     TrafficAccumulator,

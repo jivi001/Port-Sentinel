@@ -14,7 +14,7 @@ if not exist "logs" (
 :: 1. Start Backend Service
 echo [*] Starting Backend Service on http://127.0.0.1:8600 ...
 :: Run uvicorn server in background, logging to logs\backend.log
-start "Port-Sentinel Backend" /b .venv\Scripts\python.exe -m backend.main > logs\backend.log 2>&1
+start "Port-Sentinel Backend" /b .venv\Scripts\python.exe -m backend > logs\backend.log 2>&1
 if %errorLevel% neq 0 (
     echo [ERROR] Failed to start backend service.
     exit /b 1

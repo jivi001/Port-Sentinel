@@ -64,7 +64,7 @@ class SentinelWatchdog:
         try:
             # Re-run the current entry point with realpath to prevent spoofing
             executable = os.path.realpath(sys.executable)
-            args = [executable, "-m", "backend.main"]
+            args = [executable, "-m", "backend"]
             
             # Use explicit allowlist for environment to prevent privilege escalation
             safe_keys = {

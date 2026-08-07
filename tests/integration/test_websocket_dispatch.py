@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, ".")
 
-from backend.core.metrics import PortMetrics, TrafficAccumulator
+from backend.application.services.metrics_service import PortMetrics, TrafficAccumulator
 from backend.core.sniffer import PORT_ENTRY_STRUCT, ENTRY_SIZE
 
 
@@ -27,7 +27,7 @@ except ImportError:
 
 def _make_patched_accumulator():
     """Create a TrafficAccumulator with psutil mocked for the full lifetime."""
-    patcher = patch("backend.core.metrics.psutil")
+    patcher = patch("backend.application.services.metrics_service.psutil")
     mock_psutil = patcher.start()
 
     mock_proc = MagicMock()

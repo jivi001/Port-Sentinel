@@ -117,6 +117,3 @@ class ThreatIntel:
         if ip in self._malicious_ips:
             return 10
         return 0
-
-# Global instance for easy access without changing constructor signatures elsewhere
-threat_manager = ThreatIntel()

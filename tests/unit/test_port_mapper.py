@@ -12,7 +12,7 @@ import pytest
 
 sys.path.insert(0, ".")
 
-from backend.core.metrics import TrafficAccumulator
+from backend.application.services.metrics_service import TrafficAccumulator
 
 
 class TestAppNameResolution:
@@ -38,7 +38,7 @@ class TestAppNameResolution:
 
     def test_normal_pid_resolves(self):
         """Regular PID should call psutil.Process and return name."""
-        with patch("backend.core.metrics.psutil") as mock_psutil:
+        with patch("backend.application.services.metrics_service.psutil") as mock_psutil:
             mock_proc = MagicMock()
             mock_proc.name.return_value = "firefox.exe"
             mock_psutil.Process.return_value = mock_proc
@@ -52,7 +52,7 @@ class TestAppNameResolution:
 
     def test_no_such_process_returns_unknown(self):
         """Stale PID that no longer exists → 'Unknown'."""
-        with patch("backend.core.metrics.psutil") as mock_psutil:
+        with patch("backend.application.services.metrics_service.psutil") as mock_psutil:
             mock_psutil.NoSuchProcess = Exception
             mock_psutil.AccessDenied = PermissionError
             mock_psutil.ZombieProcess = Exception
@@ -73,7 +73,7 @@ class TestAppNameResolution:
 
     def test_cache_populated_on_first_call(self):
         """First resolution should populate the cache."""
-        with patch("backend.core.metrics.psutil") as mock_psutil:
+        with patch("backend.application.services.metrics_service.psutil") as mock_psutil:
             mock_proc = MagicMock()
             mock_proc.name.return_value = "notepad.exe"
             mock_psutil.Process.return_value = mock_proc

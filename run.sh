@@ -54,7 +54,7 @@ trap cleanup EXIT INT TERM
 # --- Start Services ---
 echo ""
 echo "Starting backend at http://localhost:8600 ..."
-python -m backend.main &
+python -m backend &
 BACKEND_PID=$!
 
 echo "Starting frontend at http://localhost:5173 ..."

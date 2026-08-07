@@ -75,7 +75,7 @@ echo Dashboard will be at: http://localhost:5173
 echo.
 
 REM Start backend in a separate terminal so we can see its logs
-start "Port-Sentinel_Backend" cmd /k "set VIGILANT_ENV=development&& set VIGILANT_JWT_SECRET=dev_secret_do_not_use_in_prod&& .venv\Scripts\python.exe -m backend.main"
+start "Port-Sentinel_Backend" cmd /k "set VIGILANT_ENV=development&& set VIGILANT_JWT_SECRET=dev_secret_do_not_use_in_prod&& .venv\Scripts\python.exe -m backend"
 
 REM Start frontend in this terminal
 pushd frontend

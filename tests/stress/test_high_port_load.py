@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, ".")
 
-from backend.core.metrics import TrafficAccumulator
+from backend.application.services.metrics_service import TrafficAccumulator
 
 
 # Latency budget (milliseconds)
@@ -25,7 +25,7 @@ PORT_COUNT = 100
 
 def _make_accumulator_with_patcher():
     """Create accumulator with psutil mock that persists beyond __init__."""
-    patcher = patch("backend.core.metrics.psutil")
+    patcher = patch("backend.application.services.metrics_service.psutil")
     mock_psutil = patcher.start()
 
     mock_proc = MagicMock()

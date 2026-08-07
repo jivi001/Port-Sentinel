@@ -53,8 +53,8 @@ dev = [
 ]
 
 [project.scripts]
-vigilant-backend = "backend.main:main"
-sentinel-backend = "backend.main:main"
+vigilant-backend = "backend.__main__:main"
+sentinel-backend = "backend.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
